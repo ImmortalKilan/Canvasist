@@ -105,6 +105,8 @@ impl GradescopeClient {
             status: status(row.status, due_at, now),
             source: Source::Gradescope,
             links_to_gradescope: false,
+            also_in_canvas: false,
+            canvas_due_at: None,
         })
     }
 }

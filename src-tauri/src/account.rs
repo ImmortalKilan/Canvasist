@@ -28,6 +28,8 @@ use crate::canvas::discovery::origin_string;
 use crate::domain::Snapshot;
 use crate::error::{AppError, AppResult};
 use crate::gradescope;
+use crate::marks::MarkStore;
+use crate::merge;
 use crate::secure_store::SecureStore;
 use crate::settings::SettingsStore;
 use crate::window;
@@ -364,7 +366,7 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
     courses.extend(gs.courses);
     let mut assignments = canvas_data.assignments;
     assignments.extend(gs.assignments);
-    assignments.sort_by(|a, b| a.due_at.cmp(&b.due_at).then_with(|| a.id.cmp(&b.id)));
+    let assignments = merge::merge(assignments);
     let snapshot = Snapshot {
         fetched_at: time::OffsetDateTime::now_utc(),
         courses,
@@ -411,6 +413,7 @@ pub fn sign_out(app: &AppHandle) -> AppResult<()> {
     *account.lock() = Inner::default();
     account.store.delete(SESSION_RECORD)?;
     account.store.delete(SNAPSHOT_RECORD)?;
+    app.state::<MarkStore>().clear()?;
     wipe_login_data(app)?;
     log::info!("signed out of Canvas");
     emit_status(app);

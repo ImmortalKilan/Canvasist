@@ -17,6 +17,10 @@ fn main() {
             "get_snapshot",
             "refresh",
             "open_external",
+            "get_marks",
+            "mark_done",
+            "dismiss",
+            "restore",
         ]),
     ))
     .expect("failed to run tauri-build");

@@ -14,6 +14,7 @@ use crate::canvas::discovery::{self, School};
 use crate::domain::{is_gradescope_host, Snapshot};
 use crate::error::{AppError, AppResult};
 use crate::locale::{self, Locale};
+use crate::marks::{MarkStore, Marks};
 use crate::settings::{LanguagePreference, SettingsStore};
 use crate::{http, tray};
 
@@ -149,4 +150,26 @@ pub fn open_external(app: AppHandle, account: State<'_, Account>, url: String) -
     app.opener()
         .open_url(parsed.as_str(), None::<&str>)
         .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))
+}
+
+// ---------- the user's own marks (local only) ----------
+
+#[tauri::command]
+pub fn get_marks(marks: State<'_, MarkStore>) -> Marks {
+    marks.get()
+}
+
+#[tauri::command]
+pub fn mark_done(marks: State<'_, MarkStore>, id: String) -> AppResult<Marks> {
+    marks.mark_done(&id)
+}
+
+#[tauri::command]
+pub fn dismiss(marks: State<'_, MarkStore>, id: String) -> AppResult<Marks> {
+    marks.dismiss(&id)
+}
+
+#[tauri::command]
+pub fn restore(marks: State<'_, MarkStore>, id: String) -> AppResult<Marks> {
+    marks.restore(&id)
 }

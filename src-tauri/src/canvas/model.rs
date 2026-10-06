@@ -218,6 +218,8 @@ pub fn to_assignment(
         late_due_at: None,
         source: Source::Canvas,
         links_to_gradescope,
+        also_in_canvas: false,
+        canvas_due_at: None,
     })
 }
 

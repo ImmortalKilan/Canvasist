@@ -18,6 +18,10 @@
     "allow-get-snapshot",
     "allow-refresh",
     "allow-open-external",
+    "allow-get-marks",
+    "allow-mark-done",
+    "allow-dismiss",
+    "allow-restore",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

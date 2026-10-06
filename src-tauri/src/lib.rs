@@ -9,6 +9,8 @@ mod error;
 mod gradescope;
 mod http;
 mod locale;
+mod marks;
+mod merge;
 mod secure_store;
 mod settings;
 mod tray;
@@ -18,6 +20,7 @@ use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 use crate::account::Account;
+use crate::marks::MarkStore;
 use crate::secure_store::SecureStore;
 use crate::settings::SettingsStore;
 
@@ -45,7 +48,8 @@ pub fn run() {
             // Must run before any webview exists, while no files are locked.
             account::finish_pending_wipe(app.handle());
             let data_dir = app.path().app_local_data_dir()?;
-            app.manage(Account::load(SecureStore::new(data_dir)));
+            app.manage(Account::load(SecureStore::new(data_dir.clone())));
+            app.manage(MarkStore::load(SecureStore::new(data_dir)));
 
             apply_first_run_defaults(app.handle());
             tray::create(app.handle())?;
@@ -75,6 +79,10 @@ pub fn run() {
             commands::get_snapshot,
             commands::refresh,
             commands::open_external,
+            commands::get_marks,
+            commands::mark_done,
+            commands::dismiss,
+            commands::restore,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Canvasist application");

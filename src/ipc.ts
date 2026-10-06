@@ -53,6 +53,16 @@ export interface Assignment {
   status: AssignmentStatus;
   source: Source;
   linksToGradescope: boolean;
+  /** A Gradescope entry that also appeared on Canvas and was merged. */
+  alsoInCanvas: boolean;
+  /** Canvas's deadline for a merged entry, only when it differs. */
+  canvasDueAt: string | null;
+}
+
+/** The user's local marks: assignment ID -> when it was marked. */
+export interface Marks {
+  done: Record<string, string>;
+  dismissed: Record<string, string>;
 }
 
 export interface Snapshot {
@@ -76,7 +86,8 @@ export type ErrorKind =
   | "canvas"
   | "busy"
   | "gradescopeAuth"
-  | "gradescope";
+  | "gradescope"
+  | "invalidInput";
 
 export interface AppError {
   kind: ErrorKind;
@@ -100,6 +111,11 @@ export const api = {
   getSnapshot: () => invoke<Snapshot | null>("get_snapshot"),
   refresh: () => invoke<Snapshot>("refresh"),
   openExternal: (url: string) => invoke<null>("open_external", { url }),
+
+  getMarks: () => invoke<Marks>("get_marks"),
+  markDone: (id: string) => invoke<Marks>("mark_done", { id }),
+  dismiss: (id: string) => invoke<Marks>("dismiss", { id }),
+  restore: (id: string) => invoke<Marks>("restore", { id }),
 };
 
 export const events = {

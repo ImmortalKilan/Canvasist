@@ -45,6 +45,9 @@ pub enum AppError {
 
     #[error("Gradescope returned HTTP {0}")]
     GradescopeStatus(u16),
+
+    #[error("invalid input")]
+    InvalidInput,
 }
 
 impl AppError {
@@ -65,6 +68,7 @@ impl AppError {
             Self::Busy => "busy",
             Self::GradescopeAuth => "gradescopeAuth",
             Self::GradescopeStatus(_) => "gradescope",
+            Self::InvalidInput => "invalidInput",
         }
     }
 }

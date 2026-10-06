@@ -65,6 +65,13 @@ pub struct Assignment {
     pub source: Source,
     /// True when a Canvas assignment launches Gradescope (used to merge duplicates).
     pub links_to_gradescope: bool,
+    /// True when this Gradescope entry also appeared on Canvas and was merged.
+    #[serde(default)]
+    pub also_in_canvas: bool,
+    /// The Canvas deadline of a merged entry, kept only when it differs from
+    /// Gradescope's (Gradescope's deadline is the one used).
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub canvas_due_at: Option<OffsetDateTime>,
 }
 
 /// Outcome of the Gradescope part of a refresh. Gradescope problems never block

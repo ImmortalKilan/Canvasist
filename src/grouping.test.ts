@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { groupAssignments, groupOf } from "./grouping";
-import type { Assignment, AssignmentStatus } from "./ipc";
+import { groupAssignments, groupOf, isManuallyDone } from "./grouping";
+import type { Assignment, AssignmentStatus, Marks } from "./ipc";
 
 // Dates are built in local time so the tests pass in any time zone.
 // 2026-10-07 is a Wednesday.
@@ -18,6 +18,16 @@ function assignment(id: string, due: Date, status: AssignmentStatus = "notSubmit
     status,
     source: "canvas",
     linksToGradescope: false,
+    alsoInCanvas: false,
+    canvasDueAt: null,
+  };
+}
+
+function marks(done: string[] = [], dismissed: string[] = []): Marks {
+  const at = "2026-10-07T00:00:00Z";
+  return {
+    done: Object.fromEntries(done.map((id) => [id, at])),
+    dismissed: Object.fromEntries(dismissed.map((id) => [id, at])),
   };
 }
 
@@ -39,22 +49,28 @@ describe("groupOf", () => {
     expect(groupOf(assignment("a", new Date(2026, 9, 8, 23, 59)), NOW)).toBe("tomorrow");
   });
 
-  it("treats Monday through Sunday as this week", () => {
-    expect(groupOf(assignment("a", new Date(2026, 9, 9, 10, 0)), NOW)).toBe("thisWeek");
-    expect(groupOf(assignment("a", new Date(2026, 9, 11, 23, 59)), NOW)).toBe("thisWeek");
-    expect(groupOf(assignment("a", new Date(2026, 9, 12, 0, 0)), NOW)).toBe("later");
+  it("groups anything due within seven days, then later", () => {
+    expect(groupOf(assignment("a", new Date(2026, 9, 9, 10, 0)), NOW)).toBe("nextSevenDays");
+    expect(groupOf(assignment("a", new Date(2026, 9, 14, 11, 59)), NOW)).toBe("nextSevenDays");
+    expect(groupOf(assignment("a", new Date(2026, 9, 14, 12, 0)), NOW)).toBe("later");
   });
 
-  it("handles Sunday as the last day of the week", () => {
-    const sunday = new Date(2026, 9, 11, 9, 0);
-    expect(groupOf(assignment("a", new Date(2026, 9, 11, 20, 0)), sunday)).toBe("today");
-    expect(groupOf(assignment("a", new Date(2026, 9, 12, 20, 0)), sunday)).toBe("tomorrow");
-    expect(groupOf(assignment("a", new Date(2026, 9, 13, 20, 0)), sunday)).toBe("later");
+  it("applies the user's marks", () => {
+    const due = new Date(2026, 9, 1);
+    expect(groupOf(assignment("a", due, "missing"), NOW, marks([], ["a"]))).toBe("dismissed");
+    expect(groupOf(assignment("a", due, "missing"), NOW, marks(["a"]))).toBe("completed");
+  });
+
+  it("lets real submission data win over marks", () => {
+    const graded = assignment("a", new Date(2026, 9, 1), "graded");
+    expect(groupOf(graded, NOW, marks([], ["a"]))).toBe("completed");
+    expect(isManuallyDone(graded, marks(["a"]))).toBe(false);
+    expect(isManuallyDone(assignment("b", new Date(2026, 9, 9)), marks(["b"]))).toBe(true);
   });
 });
 
 describe("groupAssignments", () => {
-  it("sorts open work soonest first and completed work most recent first", () => {
+  it("sorts open work soonest first and folded work most recent first", () => {
     const groups = groupAssignments(
       [
         assignment("later-2", new Date(2026, 9, 20)),
