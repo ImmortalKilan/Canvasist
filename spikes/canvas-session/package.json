@@ -1,0 +1,12 @@
+{
+  "name": "canvasist-spike-canvas-session",
+  "private": true,
+  "type": "module",
+  "description": "Spike: Canvas + Gradescope access via an interactive Canvas login session (no access token).",
+  "scripts": {
+    "spike": "node spike.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}
