@@ -21,7 +21,7 @@ Gradescope assignments usually don't appear in Canvas's assignment list, so chec
 - **Hide courses** you don't care about
 - **Works with most schools**: find your school by name or enter its Canvas address, then sign in on your school's own page (SSO and multi-factor authentication work as usual). No access token needed.
 - **English and Simplified Chinese**, following your system language
-- **Tiny footprint**: about 2–5 MB of memory and no CPU while in the tray
+- **Tiny footprint**: while it waits in the tray, Canvasist is a single process using about 8 MB of private memory and no measurable CPU (the window and its web view are fully closed until you open it); the installer is about 2 MB
 
 ## Install
 
