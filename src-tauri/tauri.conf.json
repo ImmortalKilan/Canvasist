@@ -13,7 +13,9 @@
     "windows": [],
     "withGlobalTauri": false,
     "security": {
-      "capabilities": ["main-window"],
+      "capabilities": [
+        "main-window"
+      ],
       "csp": {
         "default-src": "'self'",
         "script-src": "'self'",
@@ -42,7 +44,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "ImmortalKilan",
     "copyright": "Copyright (c) 2026 ImmortalKilan. MIT License.",
     "category": "Productivity",
@@ -56,8 +60,18 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "nsis": { "installMode": "currentUser" },
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false,
+        "startMenuFolder": "Canvasist"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
     }
   }
 }

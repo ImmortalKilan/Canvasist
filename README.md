@@ -1,38 +1,69 @@
-# Canvasist
+<p align="center">
+  <img src="assets/icon.svg" width="96" height="96" alt="">
+</p>
 
-> Never miss an assignment deadline again.
+<h1 align="center">Canvasist</h1>
 
-Canvasist is an open-source desktop app that gathers every assignment from **Canvas** and **Gradescope** into one minimal list, shows each deadline with its submission status, and reminds you before anything is due.
+<p align="center">Never miss a Canvas or Gradescope deadline again.</p>
 
-**Status:** early development — not usable yet.
+Canvasist is a small, open-source Windows app that gathers every assignment from **Canvas** and **Gradescope** into one minimal list, shows each deadline with its submission status, and reminds you before anything is due. It lives quietly in the system tray and uses almost no resources while it waits.
 
-## Why
+Gradescope assignments usually don't appear in Canvas's assignment list, so checking Canvas alone makes it easy to miss work. Canvasist reads both and merges duplicates.
 
-Gradescope assignments often don't appear in Canvas's assignment list, so checking Canvas alone makes it easy to miss work. Canvasist pulls from both, merges duplicates, and keeps everything in one place.
+## Features
 
-## Planned features
+- **One list for Canvas and Gradescope**, grouped by Overdue, Today, Tomorrow, Next 7 days and Later
+- **Clear status**: not submitted, submitted, late, graded, missing, excused
+- **Urgency at a glance**: work due within 24 hours turns red with a live countdown; overdue work turns grey
+- **Completed and dismissed work folds away** at the bottom of the list
+- **Desktop reminders** before each deadline (24 hours and 3 hours by default, configurable), plus one before a Gradescope late deadline; reminders missed while the computer slept are caught up
+- **Mark as done** (e.g. paper submissions, with a confirmation) and **dismiss** overdue work you won't submit; both are undoable and stay on your computer
+- **Hide courses** you don't care about
+- **Works with most schools**: find your school by name or enter its Canvas address, then sign in on your school's own page (SSO and multi-factor authentication work as usual). No access token needed.
+- **English and Simplified Chinese**, following your system language
+- **Tiny footprint**: about 2–5 MB of memory and no CPU while in the tray
 
-- Works with most Canvas instances — just point it at your school's Canvas URL
-- Gradescope access through your Canvas LTI integration (no separate Gradescope login)
-- Current-term assignments, quizzes and graded discussions
-- Detailed status: not submitted, submitted, late, graded, missing, dismissed
-- Duplicate Canvas/Gradescope entries merged into one
-- Customizable desktop notifications before deadlines
-- Runs quietly in the system tray with a small footprint; optional start on login
-- English and Chinese interface
+## Install
 
-## Privacy
+Requires Windows 10 or 11.
 
-Canvasist runs entirely on your computer. There is no Canvasist backend, telemetry or analytics.
+1. Download `Canvasist_x.y.z_x64-setup.exe` from the [Releases](../../releases/latest) page.
+2. Run it. The installer is not code-signed yet, so Windows SmartScreen may show "Windows protected your PC". Click **More info**, then **Run anyway**.
+3. Canvasist installs for your user account only (no administrator rights needed) and starts automatically when you sign in to Windows. You can turn that off in Settings.
 
-- You sign in on your school's own Canvas login page inside a separate window; Canvasist never sees your password.
-- The resulting session and any cached assignments are encrypted with Windows DPAPI, so only your Windows account can read them, and they are only ever sent to your own Canvas site (and, later, Gradescope).
+## Getting started
+
+1. Open Canvasist and search for your school, or enter your Canvas address (for example `canvas.yourschool.edu`).
+2. A sign-in window shows your school's own login page. Sign in as usual; the window closes by itself.
+3. Your assignments appear. Gradescope connects automatically through Canvas a few seconds later; there's nothing extra to sign in to.
+
+When your school's Canvas session eventually expires, Canvasist shows a notification and a "Sign in again" button.
+
+## How it works
+
+- **Sign-in**: a dedicated window loads your school's Canvas login page. Canvasist never sees your password; after you sign in, it copies the resulting session cookies and closes the window. The window has its own browser storage and cannot call any Canvasist functions.
+- **Canvas**: assignments and submission status come from the Canvas REST API, using that session.
+- **Gradescope**: Gradescope has no public API. Canvasist opens your course's Gradescope tab in an invisible window, exactly as you would in a browser, keeps the Gradescope session that results, and then reads your course pages.
+- **Background**: while the window is closed, a single lightweight task refreshes hourly (and right after the computer wakes) and checks reminders. No browser runs in the background.
+
+## Privacy and security
+
+Canvasist runs entirely on your computer. There is no Canvasist server, account, telemetry or analytics.
+
+- Your session, cached assignments, reminder history and the assignments you mark or dismiss are encrypted with Windows DPAPI, so only your Windows account can read them.
+- Session cookies are only ever sent to your own Canvas site and to Gradescope.
 - School search sends the name you type to Instructure's public school directory (the same one the official Canvas apps use). Entering your Canvas address directly skips this.
-- Signing out deletes the saved session, cached assignments and the login window's browser data.
+- Logs never contain credentials, cookies, course names, assignment titles or grades.
+- Signing out deletes everything Canvasist stored, including the sign-in window's browser data.
+- The app's own window loads only bundled code under a strict Content Security Policy, and every internal command must be explicitly granted to it.
 
-## Platform support
+Found a security problem? Please see [SECURITY.md](SECURITY.md).
 
-Windows first. macOS and Linux may follow.
+## Limitations
+
+- Windows only for now.
+- Gradescope support relies on Gradescope's web pages and on your school launching Gradescope from Canvas. If Gradescope changes its pages, an update may be needed.
+- Only the current term is shown.
 
 ## Development
 
@@ -51,11 +82,7 @@ npm run typecheck && npm run lint && npm run format:check && npm test
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-### Security model
-
-- The main window only loads the bundled UI. A strict Content Security Policy blocks remote scripts, frames and connections.
-- Every Rust command is permission-gated: the main window's capability (`src-tauri/capabilities/main-window.json`) lists exactly the commands it may call. Remote pages get no capabilities.
-- Logs never contain credentials, cookies, or personal data such as course names, assignment titles or grades.
+Tech stack: [Tauri 2](https://tauri.app) (Rust) with a React + TypeScript frontend.
 
 ## License
 
