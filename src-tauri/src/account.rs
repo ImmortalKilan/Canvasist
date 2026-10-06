@@ -185,7 +185,22 @@ pub fn start_login(app: &AppHandle, origin: Url) -> AppResult<()> {
         .inner_size(520.0, 760.0)
         .center()
         .data_directory(login_data_dir(app)?)
+        // Diagnostics for sign-in problems: hosts only (never paths or query
+        // strings, which can carry tokens), and only at debug level, so release
+        // logs never reveal which school or identity provider a user signs in with.
+        .on_navigation(|url| {
+            log::debug!(
+                "login window: navigating to {}",
+                url.host_str().unwrap_or("?")
+            );
+            true
+        })
         .on_page_load(|window, payload| {
+            log::debug!(
+                "login window: page load {:?} on {}",
+                payload.event(),
+                payload.url().host_str().unwrap_or("?")
+            );
             if payload.event() == PageLoadEvent::Finished {
                 let url = payload.url().clone();
                 tauri::async_runtime::spawn(try_complete_login(window, url));
