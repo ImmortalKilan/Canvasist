@@ -15,8 +15,8 @@
     "allow-cancel-canvas-login",
     "allow-get-auth-status",
     "allow-sign-out",
-    "allow-get-canvas-snapshot",
-    "allow-refresh-canvas",
+    "allow-get-snapshot",
+    "allow-refresh",
     "allow-open-external",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

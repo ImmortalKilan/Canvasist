@@ -14,8 +14,8 @@ fn main() {
             "cancel_canvas_login",
             "get_auth_status",
             "sign_out",
-            "get_canvas_snapshot",
-            "refresh_canvas",
+            "get_snapshot",
+            "refresh",
             "open_external",
         ]),
     ))

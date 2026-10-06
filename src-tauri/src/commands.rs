@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::account::{self, Account, AuthStatus};
 use crate::canvas::discovery::{self, School};
-use crate::canvas::model::{is_gradescope_host, CanvasSnapshot};
+use crate::domain::{is_gradescope_host, Snapshot};
 use crate::error::{AppError, AppResult};
 use crate::locale::{self, Locale};
 use crate::settings::{LanguagePreference, SettingsStore};
@@ -120,12 +120,12 @@ pub fn sign_out(app: AppHandle) -> AppResult<()> {
 // ---------- assignments ----------
 
 #[tauri::command]
-pub fn get_canvas_snapshot(account: State<'_, Account>) -> Option<CanvasSnapshot> {
+pub fn get_snapshot(account: State<'_, Account>) -> Option<Snapshot> {
     account.snapshot()
 }
 
 #[tauri::command]
-pub async fn refresh_canvas(app: AppHandle) -> AppResult<CanvasSnapshot> {
+pub async fn refresh(app: AppHandle) -> AppResult<Snapshot> {
     account::refresh(&app).await
 }
 

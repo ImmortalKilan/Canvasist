@@ -544,6 +544,20 @@ legend.settings__label + * {
   flex-shrink: 0;
 }
 
+.source-tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.assignment__late {
+  font-size: 11px;
+  color: var(--late);
+}
+
 .assignment__due {
   font-size: 12px;
   color: var(--muted);

@@ -12,7 +12,7 @@ import {
   toAppError,
   type AppError,
   type AuthStatus,
-  type CanvasSnapshot,
+  type Snapshot,
   type LanguagePreference,
   type SettingsView as Settings,
 } from "./ipc";
@@ -76,7 +76,7 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
   const t = useT();
   const [view, setView] = useState<View>("home");
   const [loginPending, setLoginPending] = useState(false);
-  const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<AppError | null>(null);
 
@@ -84,7 +84,7 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
     setRefreshing(true);
     setRefreshError(null);
     try {
-      setSnapshot(await api.refreshCanvas());
+      setSnapshot(await api.refresh());
     } catch (e) {
       const error = toAppError(e);
       // "busy" means a refresh is already running; its result will arrive on its own.
@@ -102,7 +102,7 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
     if (authState === "signedOut") return;
     let cancelled = false;
     api
-      .getCanvasSnapshot()
+      .getSnapshot()
       .then((cached) => {
         if (!cancelled && cached) setSnapshot(cached);
       })
@@ -185,6 +185,23 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
                   {t("banner.relogin")}
                 </button>
               </div>
+            )}
+            {auth.state === "signedIn" && snapshot?.gradescope === "needsCanvasLogin" && (
+              <div className="banner" role="status">
+                <span>{t("banner.gradescopeLogin")}</span>
+                <button
+                  type="button"
+                  className="banner__action"
+                  onClick={() => void startLogin(auth.origin)}
+                >
+                  {t("banner.relogin")}
+                </button>
+              </div>
+            )}
+            {snapshot?.gradescope === "unavailable" && (
+              <p className="form-hint" role="status">
+                {t("banner.gradescopeUnavailable")}
+              </p>
             )}
             <AssignmentList
               snapshot={snapshot}

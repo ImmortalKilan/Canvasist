@@ -12,6 +12,15 @@ use url::Url;
 
 use crate::error::AppResult;
 
+/// A cookie's name, value and attributes, for handing it to a webview.
+pub struct CookieEntry {
+    pub name: String,
+    pub value: String,
+    pub path: String,
+    pub secure: bool,
+    pub http_only: bool,
+}
+
 #[derive(Default)]
 pub struct SharedCookies {
     store: Mutex<CookieStore>,
@@ -28,6 +37,21 @@ impl SharedCookies {
             // The error never includes the cookie value.
             log::debug!("ignored a cookie that does not apply to its URL: {e}");
         }
+    }
+
+    /// Unexpired cookies that would be sent to `url`.
+    pub fn entries_for(&self, url: &Url) -> Vec<CookieEntry> {
+        self.lock()
+            .matches(url)
+            .into_iter()
+            .map(|c| CookieEntry {
+                name: c.name().to_owned(),
+                value: c.value().to_owned(),
+                path: c.path().unwrap_or("/").to_owned(),
+                secure: c.secure().unwrap_or(true),
+                http_only: c.http_only().unwrap_or(false),
+            })
+            .collect()
     }
 
     #[cfg(test)]
@@ -109,6 +133,19 @@ mod tests {
         assert!(jar.has_cookies_for(&url("https://canvas.school.edu/api/v1/courses")));
         assert!(!jar.has_cookies_for(&url("https://evil.example.com/")));
         assert!(jar.cookies(&url("https://evil.example.com/")).is_none());
+    }
+
+    #[test]
+    fn exports_entries_with_attributes() {
+        let jar = SharedCookies::default();
+        let canvas = url("https://canvas.school.edu/");
+        jar.insert_set_cookie("canvas_session=abc; Path=/; Secure; HttpOnly", &canvas);
+        jar.insert_set_cookie("other=1; Path=/", &url("https://other.example.com/"));
+        let entries = jar.entries_for(&canvas);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "canvas_session");
+        assert!(entries[0].http_only && entries[0].secure);
+        assert_eq!(entries[0].path, "/");
     }
 
     #[test]

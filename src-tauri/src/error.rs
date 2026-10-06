@@ -39,6 +39,12 @@ pub enum AppError {
 
     #[error("a refresh is already running")]
     Busy,
+
+    #[error("the Gradescope session is not signed in")]
+    GradescopeAuth,
+
+    #[error("Gradescope returned HTTP {0}")]
+    GradescopeStatus(u16),
 }
 
 impl AppError {
@@ -57,6 +63,8 @@ impl AppError {
             Self::SessionExpired => "sessionExpired",
             Self::CanvasStatus(_) => "canvas",
             Self::Busy => "busy",
+            Self::GradescopeAuth => "gradescopeAuth",
+            Self::GradescopeStatus(_) => "gradescope",
         }
     }
 }

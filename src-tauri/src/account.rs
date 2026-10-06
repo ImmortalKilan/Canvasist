@@ -25,15 +25,18 @@ use url::Url;
 use crate::canvas::client::CanvasClient;
 use crate::canvas::cookies::SharedCookies;
 use crate::canvas::discovery::origin_string;
-use crate::canvas::model::CanvasSnapshot;
+use crate::domain::Snapshot;
 use crate::error::{AppError, AppResult};
+use crate::gradescope;
 use crate::secure_store::SecureStore;
 use crate::settings::SettingsStore;
 use crate::window;
 
 pub const LOGIN_LABEL: &str = "canvas-login";
 const SESSION_RECORD: &str = "canvas-session";
-const SNAPSHOT_RECORD: &str = "canvas-snapshot";
+const SNAPSHOT_RECORD: &str = "snapshot";
+/// Snapshot record name used before Gradescope support; removed on startup.
+const LEGACY_SNAPSHOT_RECORD: &str = "canvas-snapshot";
 const LOGIN_DATA_DIR: &str = "login-webview";
 const WIPE_MARKER: &str = "login-webview.wipe";
 
@@ -63,20 +66,25 @@ pub enum AuthStatus {
 #[derive(Clone)]
 struct Session {
     origin: Url,
+    /// Holds both the Canvas and the Gradescope cookies; each is only ever
+    /// sent to its own host.
     cookies: Arc<SharedCookies>,
+    gradescope_origin: Option<Url>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct StoredSession {
     origin: String,
     cookies: String,
+    #[serde(default)]
+    gradescope_origin: Option<String>,
 }
 
 #[derive(Default)]
 struct Inner {
     session: Option<Session>,
     expired: bool,
-    snapshot: Option<CanvasSnapshot>,
+    snapshot: Option<Snapshot>,
 }
 
 pub struct Account {
@@ -101,8 +109,10 @@ impl Account {
                 Some(Session {
                     origin,
                     cookies: Arc::new(cookies),
+                    gradescope_origin: s.gradescope_origin.and_then(|g| Url::parse(&g).ok()),
                 })
             });
+        let _ = store.delete(LEGACY_SNAPSHOT_RECORD);
         let snapshot = if session.is_some() {
             store.load(SNAPSHOT_RECORD).unwrap_or(None)
         } else {
@@ -137,7 +147,7 @@ impl Account {
         }
     }
 
-    pub fn snapshot(&self) -> Option<CanvasSnapshot> {
+    pub fn snapshot(&self) -> Option<Snapshot> {
         self.lock().snapshot.clone()
     }
 
@@ -147,6 +157,7 @@ impl Account {
             &StoredSession {
                 origin: origin_string(&session.origin),
                 cookies: session.cookies.to_json()?,
+                gradescope_origin: session.gradescope_origin.as_ref().map(origin_string),
             },
         )
     }
@@ -265,6 +276,7 @@ async fn try_complete_login(window: WebviewWindow, url: Url) {
             Session {
                 origin,
                 cookies: jar,
+                gradescope_origin: None,
             },
         ),
         // Not signed in yet (still on a login or SSO page).
@@ -312,7 +324,7 @@ impl Drop for RefreshGuard<'_> {
     }
 }
 
-pub async fn refresh(app: &AppHandle) -> AppResult<CanvasSnapshot> {
+pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
     let account = app.state::<Account>();
     if account.refreshing.swap(true, Ordering::SeqCst) {
         return Err(AppError::Busy);
@@ -325,35 +337,70 @@ pub async fn refresh(app: &AppHandle) -> AppResult<CanvasSnapshot> {
         .clone()
         .ok_or(AppError::NotSignedIn)?;
     let show_unsubmittable = app.state::<SettingsStore>().get().show_unsubmittable;
-    let client = CanvasClient::new(session.origin.clone(), session.cookies.clone())?;
+    let canvas = CanvasClient::new(session.origin.clone(), session.cookies.clone())?;
 
-    match client.fetch_snapshot(show_unsubmittable).await {
-        Ok(snapshot) => {
-            if let Err(e) = account.store.save(SNAPSHOT_RECORD, &snapshot) {
-                log::warn!("could not cache snapshot: {e}");
-            }
-            // Canvas may have rotated session cookies during the requests.
-            if let Err(e) = account.save_session(&session) {
-                log::warn!("could not update saved session: {e}");
-            }
-            let was_expired = {
-                let mut inner = account.lock();
-                inner.snapshot = Some(snapshot.clone());
-                std::mem::replace(&mut inner.expired, false)
-            };
-            if was_expired {
-                emit_status(app);
-            }
-            Ok(snapshot)
-        }
+    let canvas_data = match canvas.fetch(show_unsubmittable).await {
+        Ok(data) => data,
         Err(AppError::SessionExpired) => {
             log::info!("Canvas session expired");
             account.lock().expired = true;
             emit_status(app);
-            Err(AppError::SessionExpired)
+            return Err(AppError::SessionExpired);
         }
-        Err(e) => Err(e),
+        Err(e) => return Err(e),
+    };
+
+    let gs = gradescope::refresh(
+        app,
+        &canvas,
+        &session.origin,
+        &canvas_data.course_ids,
+        session.cookies.clone(),
+        session.gradescope_origin.clone(),
+    )
+    .await;
+
+    let mut courses = canvas_data.courses;
+    courses.extend(gs.courses);
+    let mut assignments = canvas_data.assignments;
+    assignments.extend(gs.assignments);
+    assignments.sort_by(|a, b| a.due_at.cmp(&b.due_at).then_with(|| a.id.cmp(&b.id)));
+    let snapshot = Snapshot {
+        fetched_at: time::OffsetDateTime::now_utc(),
+        courses,
+        assignments,
+        gradescope: gs.state,
+    };
+
+    let session = Session {
+        gradescope_origin: gs.origin,
+        ..session
+    };
+    let was_expired = {
+        let mut inner = account.lock();
+        // Skip the update if the user signed out or switched sites meanwhile.
+        let still_current = inner
+            .session
+            .as_ref()
+            .is_some_and(|s| s.origin == session.origin);
+        if !still_current {
+            return Ok(snapshot);
+        }
+        inner.session = Some(session.clone());
+        inner.snapshot = Some(snapshot.clone());
+        std::mem::replace(&mut inner.expired, false)
+    };
+    if let Err(e) = account.store.save(SNAPSHOT_RECORD, &snapshot) {
+        log::warn!("could not cache snapshot: {e}");
     }
+    // Saves rotated Canvas cookies and any new Gradescope session.
+    if let Err(e) = account.save_session(&session) {
+        log::warn!("could not update saved session: {e}");
+    }
+    if was_expired {
+        emit_status(app);
+    }
+    Ok(snapshot)
 }
 
 // ---------- sign out ----------
@@ -403,4 +450,13 @@ pub fn finish_pending_wipe(app: &AppHandle) {
             }
         }
     }
+}
+
+/// Loads the saved session from an app data directory (developer probes only).
+#[cfg(test)]
+pub(crate) fn load_saved_session(dir: PathBuf) -> Option<(Arc<SharedCookies>, Option<Url>)> {
+    let stored: StoredSession = SecureStore::new(dir).load(SESSION_RECORD).ok()??;
+    let cookies = SharedCookies::from_json(&stored.cookies).ok()?;
+    let gradescope = stored.gradescope_origin.and_then(|g| Url::parse(&g).ok());
+    Some((Arc::new(cookies), gradescope))
 }

@@ -10,7 +10,8 @@ use time::OffsetDateTime;
 use url::Url;
 
 use super::cookies::SharedCookies;
-use super::model::{self, CanvasSnapshot, RawAssignment, RawCourse};
+use super::model::{self, RawAssignment, RawCourse};
+use crate::domain::{Assignment, Course};
 use crate::error::{AppError, AppResult};
 use crate::http;
 
@@ -18,6 +19,13 @@ use crate::http;
 const MAX_PAGES: usize = 50;
 /// Courses fetched in parallel; low enough to stay well within Canvas rate limits.
 const COURSE_CONCURRENCY: usize = 4;
+
+pub struct CanvasData {
+    pub courses: Vec<Course>,
+    pub assignments: Vec<Assignment>,
+    /// Current-term course IDs, used to look for a Gradescope launch point.
+    pub course_ids: Vec<String>,
+}
 
 pub struct CanvasClient {
     origin: Url,
@@ -38,7 +46,8 @@ impl CanvasClient {
         Ok(())
     }
 
-    pub async fn fetch_snapshot(&self, show_unsubmittable: bool) -> AppResult<CanvasSnapshot> {
+    /// Fetches current-term courses and their assignments.
+    pub async fn fetch(&self, show_unsubmittable: bool) -> AppResult<CanvasData> {
         let now = OffsetDateTime::now_utc();
         let courses: Vec<RawCourse> = self
             .get_paginated("/api/v1/courses?enrollment_state=active&include[]=term&per_page=100")
@@ -50,7 +59,7 @@ impl CanvasClient {
 
         // Owned IDs keep the futures free of borrowed course data, so they stay `Send`.
         let course_ids: Vec<String> = current.iter().map(|c| c.id.clone()).collect();
-        let per_course: Vec<(String, Vec<RawAssignment>)> = stream::iter(course_ids)
+        let per_course: Vec<(String, Vec<RawAssignment>)> = stream::iter(course_ids.clone())
             .map(|course_id| {
                 let path = format!(
                     "/api/v1/courses/{course_id}/assignments?include[]=submission&order_by=due_at&per_page=100"
@@ -68,7 +77,7 @@ impl CanvasClient {
             .try_collect()
             .await?;
 
-        let mut assignments: Vec<_> = per_course
+        let assignments: Vec<Assignment> = per_course
             .iter()
             .flat_map(|(course_id, list)| {
                 list.iter().filter_map(move |raw| {
@@ -76,20 +85,37 @@ impl CanvasClient {
                 })
             })
             .collect();
-        assignments.sort_by(|a, b| a.due_at.cmp(&b.due_at).then_with(|| a.id.cmp(&b.id)));
-
-        let snapshot = CanvasSnapshot {
-            fetched_at: now,
-            courses: current.iter().map(model::to_course).collect(),
-            assignments,
-        };
         // Counts only: logs never contain course names or assignment titles.
         log::info!(
             "canvas refresh: {} current course(s), {} assignment(s) shown",
-            snapshot.courses.len(),
-            snapshot.assignments.len()
+            current.len(),
+            assignments.len()
         );
-        Ok(snapshot)
+        Ok(CanvasData {
+            courses: current.iter().map(model::to_course).collect(),
+            assignments,
+            course_ids,
+        })
+    }
+
+    /// Returns the absolute URL of the first Gradescope navigation tab found in
+    /// the given courses, which is where the Gradescope LTI launch starts.
+    pub async fn find_gradescope_tab(&self, course_ids: &[String]) -> AppResult<Option<Url>> {
+        for course_id in course_ids {
+            let path = format!("/api/v1/courses/{course_id}/tabs");
+            let tabs: Vec<model::RawTab> = match self.get_paginated(&path).await {
+                Ok(tabs) => tabs,
+                Err(AppError::CanvasStatus(403 | 404)) => continue,
+                Err(e) => return Err(e),
+            };
+            if let Some(url) = tabs
+                .iter()
+                .find_map(|t| model::gradescope_tab_url(t, &self.origin))
+            {
+                return Ok(Some(url));
+            }
+        }
+        Ok(None)
     }
 
     async fn get_json<T: DeserializeOwned>(&self, path: &str) -> AppResult<T> {

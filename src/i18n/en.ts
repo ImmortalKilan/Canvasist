@@ -38,6 +38,8 @@ export const en = {
   "group.later": "Later",
   "group.completed": "Completed",
   "list.openInCanvas": "Open in Canvas",
+  "list.openInGradescope": "Open in Gradescope",
+  "list.lateDue": "Late until {date}",
 
   "status.notSubmitted": "Not submitted",
   "status.submitted": "Submitted",
@@ -48,6 +50,9 @@ export const en = {
 
   "banner.expired": "Your Canvas session has expired.",
   "banner.relogin": "Sign in again",
+  "banner.gradescopeLogin": "Sign in to Canvas again to load Gradescope assignments.",
+  "banner.gradescopeUnavailable":
+    "Gradescope couldn't be reached. It will be retried on the next refresh.",
 
   "settings.title": "Settings",
   "settings.back": "Back",

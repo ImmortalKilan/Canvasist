@@ -30,10 +30,16 @@ export type AssignmentStatus =
 
 export type SubmissionKind = "online" | "onPaper" | "noSubmission" | "notGraded";
 
+export type Source = "canvas" | "gradescope";
+
+/** Outcome of the Gradescope part of the last refresh. */
+export type GradescopeState = "ok" | "notLinked" | "needsCanvasLogin" | "unavailable";
+
 export interface Course {
   id: string;
   code: string;
   name: string;
+  source: Source;
 }
 
 export interface Assignment {
@@ -41,16 +47,19 @@ export interface Assignment {
   courseId: string;
   title: string;
   dueAt: string;
+  lateDueAt: string | null;
   url: string | null;
   kind: SubmissionKind;
   status: AssignmentStatus;
+  source: Source;
   linksToGradescope: boolean;
 }
 
-export interface CanvasSnapshot {
+export interface Snapshot {
   fetchedAt: string;
   courses: Course[];
   assignments: Assignment[];
+  gradescope: GradescopeState;
 }
 
 export type ErrorKind =
@@ -65,7 +74,9 @@ export type ErrorKind =
   | "notSignedIn"
   | "sessionExpired"
   | "canvas"
-  | "busy";
+  | "busy"
+  | "gradescopeAuth"
+  | "gradescope";
 
 export interface AppError {
   kind: ErrorKind;
@@ -86,8 +97,8 @@ export const api = {
   getAuthStatus: () => invoke<AuthStatus>("get_auth_status"),
   signOut: () => invoke<null>("sign_out"),
 
-  getCanvasSnapshot: () => invoke<CanvasSnapshot | null>("get_canvas_snapshot"),
-  refreshCanvas: () => invoke<CanvasSnapshot>("refresh_canvas"),
+  getSnapshot: () => invoke<Snapshot | null>("get_snapshot"),
+  refresh: () => invoke<Snapshot>("refresh"),
   openExternal: (url: string) => invoke<null>("open_external", { url }),
 };
 

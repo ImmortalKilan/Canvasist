@@ -3,8 +3,10 @@
 mod account;
 mod canvas;
 mod commands;
+mod domain;
 mod dpapi;
 mod error;
+mod gradescope;
 mod http;
 mod locale;
 mod secure_store;
@@ -70,8 +72,8 @@ pub fn run() {
             commands::cancel_canvas_login,
             commands::get_auth_status,
             commands::sign_out,
-            commands::get_canvas_snapshot,
-            commands::refresh_canvas,
+            commands::get_snapshot,
+            commands::refresh,
             commands::open_external,
         ])
         .build(tauri::generate_context!())

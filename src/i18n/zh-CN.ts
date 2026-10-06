@@ -39,6 +39,8 @@ export const zhCN: Record<MessageKey, string> = {
   "group.later": "之后",
   "group.completed": "已完成",
   "list.openInCanvas": "在 Canvas 中打开",
+  "list.openInGradescope": "在 Gradescope 中打开",
+  "list.lateDue": "迟交截止 {date}",
 
   "status.notSubmitted": "未提交",
   "status.submitted": "已提交",
@@ -49,6 +51,8 @@ export const zhCN: Record<MessageKey, string> = {
 
   "banner.expired": "Canvas 登录已过期。",
   "banner.relogin": "重新登录",
+  "banner.gradescopeLogin": "需要重新登录 Canvas 才能读取 Gradescope 作业。",
+  "banner.gradescopeUnavailable": "暂时无法连接 Gradescope，下次刷新时会自动重试。",
 
   "settings.title": "设置",
   "settings.back": "返回",

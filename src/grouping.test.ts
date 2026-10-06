@@ -12,9 +12,11 @@ function assignment(id: string, due: Date, status: AssignmentStatus = "notSubmit
     courseId: "c",
     title: id,
     dueAt: due.toISOString(),
+    lateDueAt: null,
     url: null,
     kind: "online",
     status,
+    source: "canvas",
     linksToGradescope: false,
   };
 }

@@ -4,10 +4,10 @@ import { formatDue, formatTime } from "../format";
 import { GROUP_ORDER, groupAssignments, type GroupKey } from "../grouping";
 import { useT } from "../i18n/context";
 import type { Locale } from "../i18n/translate";
-import { api, type AppError, type Assignment, type CanvasSnapshot } from "../ipc";
+import { api, type AppError, type Assignment, type Snapshot } from "../ipc";
 
 interface Props {
-  snapshot: CanvasSnapshot | null;
+  snapshot: Snapshot | null;
   locale: Locale;
   error: AppError | null;
 }
@@ -120,20 +120,30 @@ function Rows({ items, group, courseCodes, locale }: RowsProps) {
               type="button"
               className={`assignment${group === "completed" ? " assignment--done" : ""}`}
               disabled={!url}
-              title={t("list.openInCanvas")}
+              title={
+                a.source === "gradescope" ? t("list.openInGradescope") : t("list.openInCanvas")
+              }
               onClick={() => {
                 if (url) void api.openExternal(url);
               }}
             >
               <span className={`status-dot status-dot--${a.status}`} aria-hidden="true" />
               <span className="assignment__main">
-                <span className="assignment__course">{courseCodes.get(a.courseId)}</span>
+                <span className="assignment__course">
+                  {courseCodes.get(a.courseId)}
+                  {a.source === "gradescope" && <span className="source-tag">Gradescope</span>}
+                </span>
                 <span className="assignment__title">{a.title}</span>
               </span>
               <span className="assignment__meta">
                 <span className="assignment__due">
                   {timeOnly ? formatTime(a.dueAt, locale) : formatDue(a.dueAt, locale)}
                 </span>
+                {a.lateDueAt && group !== "completed" && (
+                  <span className="assignment__late">
+                    {t("list.lateDue", { date: formatDue(a.lateDueAt, locale) })}
+                  </span>
+                )}
                 <span className={`badge badge--${a.status}`}>{t(`status.${a.status}`)}</span>
               </span>
             </button>

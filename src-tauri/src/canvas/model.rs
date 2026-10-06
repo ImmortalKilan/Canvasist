@@ -1,7 +1,9 @@
 //! Canvas API payloads and the rules that turn them into Canvasist assignments.
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 use time::OffsetDateTime;
+
+use crate::domain::{is_gradescope_host, Assignment, Course, Source, Status, SubmissionKind};
 
 /// Canvas sends `null` for many booleans and lists; treat it like a missing field.
 fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -64,72 +66,35 @@ pub struct RawSubmission {
     pub grade: Option<String>,
 }
 
+/// A course navigation tab (`/api/v1/courses/:id/tabs`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct RawTab {
+    pub html_url: Option<String>,
+    pub label: Option<String>,
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RawExternalTool {
     pub url: Option<String>,
 }
 
-// ---------- Canvasist domain model ----------
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct Course {
-    pub id: String,
-    /// Short label such as "CSE 110"; falls back to the full name.
-    pub code: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum Status {
-    NotSubmitted,
-    Submitted,
-    Late,
-    Graded,
-    /// Past the deadline with nothing submitted; stays visible until dismissed.
-    Missing,
-    /// The instructor exempted the student.
-    Excused,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum SubmissionKind {
-    /// Submitted through Canvas or an external tool.
-    Online,
-    /// Handed in on paper; can only be marked done manually.
-    OnPaper,
-    /// Nothing to hand in (e.g. an exam score entered by the instructor).
-    NoSubmission,
-    NotGraded,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Assignment {
-    pub id: String,
-    pub course_id: String,
-    pub title: String,
-    #[serde(with = "time::serde::rfc3339")]
-    pub due_at: OffsetDateTime,
-    pub url: Option<String>,
-    pub kind: SubmissionKind,
-    pub status: Status,
-    /// True when the Canvas assignment launches Gradescope (used to merge duplicates).
-    pub links_to_gradescope: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct CanvasSnapshot {
-    #[serde(with = "time::serde::rfc3339")]
-    pub fetched_at: OffsetDateTime,
-    pub courses: Vec<Course>,
-    pub assignments: Vec<Assignment>,
-}
-
 // ---------- rules ----------
+
+/// Absolute URL of a Gradescope external-tool tab on the same Canvas site.
+pub fn gradescope_tab_url(tab: &RawTab, origin: &url::Url) -> Option<url::Url> {
+    let is_external = tab.kind.as_deref() == Some("external");
+    let is_gradescope = tab
+        .label
+        .as_deref()
+        .is_some_and(|l| l.to_ascii_lowercase().contains("gradescope"));
+    if !is_external || !is_gradescope {
+        return None;
+    }
+    let url = origin.join(tab.html_url.as_deref()?).ok()?;
+    (url.origin() == origin.origin()).then_some(url)
+}
 
 /// A course counts as current when today falls inside its term dates. Without
 /// term dates, the course's own dates are used; with no dates at all it is kept
@@ -165,6 +130,7 @@ pub fn to_course(raw: &RawCourse) -> Course {
         id: raw.id.clone(),
         code,
         name,
+        source: Source::Canvas,
     }
 }
 
@@ -249,15 +215,10 @@ pub fn to_assignment(
         url: raw.html_url.clone().filter(|u| u.starts_with("https://")),
         kind,
         status: status(raw.submission.as_ref(), due_at, now),
+        late_due_at: None,
+        source: Source::Canvas,
         links_to_gradescope,
     })
-}
-
-pub fn is_gradescope_host(host: &str) -> bool {
-    let host = host.to_ascii_lowercase();
-    ["gradescope.com", "gradescope.ca", "gradescope.eu"]
-        .iter()
-        .any(|d| host == *d || host.ends_with(&format!(".{d}")))
 }
 
 #[cfg(test)]
@@ -424,6 +385,33 @@ mod tests {
         );
         assert!(is_gradescope_host("gradescope.ca"));
         assert!(!is_gradescope_host("notgradescope.com"));
+    }
+
+    #[test]
+    fn finds_gradescope_tab_on_same_site_only() {
+        let origin = url::Url::parse("https://canvas.example.edu").unwrap();
+        let tab = |label: &str, kind: &str, href: &str| RawTab {
+            html_url: Some(href.into()),
+            label: Some(label.into()),
+            kind: Some(kind.into()),
+        };
+        assert_eq!(
+            gradescope_tab_url(
+                &tab("Gradescope", "external", "/courses/1/external_tools/77"),
+                &origin
+            )
+            .unwrap()
+            .as_str(),
+            "https://canvas.example.edu/courses/1/external_tools/77"
+        );
+        assert!(
+            gradescope_tab_url(&tab("Grades", "internal", "/courses/1/grades"), &origin).is_none()
+        );
+        assert!(gradescope_tab_url(
+            &tab("Gradescope", "external", "https://evil.example.com/x"),
+            &origin
+        )
+        .is_none());
     }
 
     #[test]

@@ -36,6 +36,9 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 cookie_store = { version = "0.22", default-features = false, features = ["serde_json"] }
 url = { version = "2", features = ["serde"] }
 time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
+scraper = "0.27"
+# Already used by Tauri's async runtime; only the timer is needed here.
+tokio = { version = "1", default-features = false, features = ["time"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [target.'cfg(windows)'.dependencies]
