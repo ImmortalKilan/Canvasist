@@ -700,6 +700,43 @@ legend.settings__label + * {
   --status-color: var(--muted);
 }
 
+/* Urgency colours for open work (lighthouse G5): within 24 hours red with a
+   countdown, overdue grey, within 7 days the accent colour, later neutral. */
+.assignment--urgent .status-dot,
+.assignment--urgent .badge {
+  --status-color: var(--danger);
+}
+
+.assignment--urgent .assignment__due,
+.assignment__countdown {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.assignment__countdown {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.assignment--overdue .status-dot,
+.assignment--overdue .badge {
+  --status-color: var(--muted);
+}
+
+.assignment--overdue .assignment__title {
+  color: var(--muted);
+}
+
+.assignment--soon .status-dot,
+.assignment--soon .badge {
+  --status-color: var(--accent-warm);
+}
+
+.assignment--later .status-dot,
+.assignment--later .badge {
+  --status-color: var(--text);
+}
+
 /* ---------- banner, confirm, spinner ---------- */
 
 .banner {

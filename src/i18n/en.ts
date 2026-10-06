@@ -53,6 +53,8 @@ export const en = {
   "list.openInGradescope": "Open in Gradescope",
   "list.lateDue": "Late until {date}",
   "list.canvasDueDiffers": "Canvas says {date}",
+  "countdown.hoursMinutes": "{h}h {m}m left",
+  "countdown.minutes": "{m} min left",
 
   "status.notSubmitted": "Not submitted",
   "status.submitted": "Submitted",

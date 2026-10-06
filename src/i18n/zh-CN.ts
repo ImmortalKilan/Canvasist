@@ -54,6 +54,8 @@ export const zhCN: Record<MessageKey, string> = {
   "list.openInGradescope": "在 Gradescope 中打开",
   "list.lateDue": "迟交截止 {date}",
   "list.canvasDueDiffers": "Canvas 显示 {date}",
+  "countdown.hoursMinutes": "还剩 {h} 小时 {m} 分",
+  "countdown.minutes": "还剩 {m} 分钟",
 
   "status.notSubmitted": "未提交",
   "status.submitted": "已提交",

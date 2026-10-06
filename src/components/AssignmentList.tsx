@@ -12,6 +12,7 @@ import {
 import { useT } from "../i18n/context";
 import type { Locale } from "../i18n/translate";
 import { api, toAppError, type AppError, type Assignment, type Marks, type Snapshot } from "../ipc";
+import { timeLeft, urgencyOf, useNow } from "../urgency";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { RowMenu, type MenuAction } from "./RowMenu";
 
@@ -27,6 +28,9 @@ export function AssignmentList({ snapshot, locale, error }: Props) {
   const [markError, setMarkError] = useState<AppError | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<GroupKey>>(new Set());
   const [confirming, setConfirming] = useState<Assignment | null>(null);
+  // Re-evaluated every 30 s: countdowns stay accurate to the minute and items
+  // move between groups as time passes.
+  const now = useNow(30_000);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,8 +61,8 @@ export function AssignmentList({ snapshot, locale, error }: Props) {
     [snapshot],
   );
   const groups = useMemo(
-    () => (snapshot ? groupAssignments(snapshot.assignments, new Date(), marks) : null),
-    [snapshot, marks],
+    () => (snapshot ? groupAssignments(snapshot.assignments, now, marks) : null),
+    [snapshot, marks, now],
   );
 
   const openCount = groups
@@ -135,6 +139,7 @@ export function AssignmentList({ snapshot, locale, error }: Props) {
                   manual={isManuallyDone(a, marks)}
                   courseCode={courseCodes.get(a.courseId)}
                   locale={locale}
+                  now={now}
                   actions={actionsFor(a, key)}
                 />
               ))}
@@ -209,18 +214,22 @@ interface RowProps {
   manual: boolean;
   courseCode: string | undefined;
   locale: Locale;
+  now: Date;
   actions: readonly MenuAction[];
 }
 
-function Row({ assignment: a, group, manual, courseCode, locale, actions }: RowProps) {
+function Row({ assignment: a, group, manual, courseCode, locale, now, actions }: RowProps) {
   const t = useT();
   // Today and tomorrow already name the day, so only the time is shown.
   const timeOnly = group === "today" || group === "tomorrow";
   const folded = FOLDED_GROUPS.has(group);
   const statusKey = manual ? "manualDone" : a.status;
   const url = a.url;
+  const urgency = folded ? null : urgencyOf(a.dueAt, now, group === "overdue");
+  const left = urgency === "urgent" ? timeLeft(a.dueAt, now) : null;
+  const rowClass = folded ? " assignment--done" : ` assignment--${urgency}`;
   return (
-    <li className={`assignment${folded ? " assignment--done" : ""}`}>
+    <li className={`assignment${rowClass}`}>
       <button
         type="button"
         className="assignment__open"
@@ -242,6 +251,16 @@ function Row({ assignment: a, group, manual, courseCode, locale, actions }: RowP
           <span className="assignment__due">
             {timeOnly ? formatTime(a.dueAt, locale) : formatDue(a.dueAt, locale)}
           </span>
+          {left && (
+            <span className="assignment__countdown">
+              {left.hours > 0
+                ? t("countdown.hoursMinutes", {
+                    h: left.hours,
+                    m: String(left.minutes).padStart(2, "0"),
+                  })
+                : t("countdown.minutes", { m: left.minutes })}
+            </span>
+          )}
           {a.lateDueAt && !folded && (
             <span className="assignment__late">
               {t("list.lateDue", { date: formatDue(a.lateDueAt, locale) })}
