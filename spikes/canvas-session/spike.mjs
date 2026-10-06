@@ -219,27 +219,78 @@ async function launchGradescope(ctx, page, origin, entry) {
   }
 
   // Fallback: open the Gradescope course tab the way a user would click it.
-  for (const [i, t] of entry.gradescopeTabs.slice(0, 2).entries()) {
-    const popupPromise = ctx.waitForEvent("page", { timeout: LAUNCH_TIMEOUT_MS }).catch(() => null);
-    await page.goto(t.htmlUrl);
-    const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const gsFrame = page.frames().find((f) => {
-        try { return GRADESCOPE_HOST.test(new URL(f.url()).hostname); } catch { return false; }
-      });
-      if (gsFrame) {
-        log("4 launch", `tab fallback #${i + 1}: Gradescope loaded inside an iframe`);
-        return new URL(gsFrame.url()).origin;
-      }
-      await page.waitForTimeout(1000);
+  for (const [i, t] of entry.gradescopeTabs.entries()) {
+    try {
+      const gs = await launchViaTab(ctx, page, new URL(t.htmlUrl, origin), i + 1);
+      if (gs) return gs;
+    } catch (e) {
+      log("4 launch", `tab fallback #${i + 1}: error ${safeError(e)}`);
     }
-    const popup = await popupPromise;
-    if (popup && GRADESCOPE_HOST.test(new URL(popup.url()).hostname)) {
-      log("4 launch", `tab fallback #${i + 1}: Gradescope opened in a new window`);
-      return new URL(popup.url()).origin;
-    }
-    log("4 launch", `tab fallback #${i + 1}: no Gradescope frame or window detected`);
   }
+  return null;
+}
+
+function gradescopeOriginOf(url) {
+  try {
+    const u = new URL(url);
+    return GRADESCOPE_HOST.test(u.hostname) ? u.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+async function launchViaTab(ctx, page, tabUrl, n) {
+  await page.goto(tabUrl.href);
+  await page.waitForLoadState("domcontentloaded");
+
+  // Describe how Canvas embeds the tool (structure only, no content).
+  const shape = await page.evaluate(() => {
+    const form = document.querySelector("#tool_form");
+    const newWindowButton = [...document.querySelectorAll("#tool_form button, #tool_form a, button, a")]
+      .find((el) => /new (window|tab)/i.test(el.textContent || ""));
+    return {
+      hasToolForm: !!form,
+      formTarget: form?.getAttribute("target") || "(none)",
+      iframes: document.querySelectorAll("iframe").length,
+      hasNewWindowButton: !!newWindowButton,
+    };
+  });
+  log(
+    "4 launch",
+    `tab #${n}: tool_form=${shape.hasToolForm} target=${shape.formTarget} iframes=${shape.iframes} newWindowButton=${shape.hasNewWindowButton}`,
+  );
+
+  if (shape.hasNewWindowButton) {
+    const button = page.getByRole("button", { name: /new (window|tab)/i })
+      .or(page.getByRole("link", { name: /new (window|tab)/i }))
+      .first();
+    await button.click().catch(() => {});
+  }
+
+  const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const top = gradescopeOriginOf(page.url());
+    if (top) {
+      log("4 launch", `tab #${n}: main window navigated to Gradescope`);
+      return top;
+    }
+    for (const f of page.frames()) {
+      const gs = gradescopeOriginOf(f.url());
+      if (gs) {
+        log("4 launch", `tab #${n}: Gradescope loaded inside an iframe`);
+        return gs;
+      }
+    }
+    for (const p of ctx.pages()) {
+      const gs = p !== page && gradescopeOriginOf(p.url());
+      if (gs) {
+        log("4 launch", `tab #${n}: Gradescope opened in a new window`);
+        return gs;
+      }
+    }
+    await page.waitForTimeout(1000);
+  }
+  log("4 launch", `tab #${n}: no Gradescope frame or window within ${LAUNCH_TIMEOUT_MS / 1000}s`);
   return null;
 }
 
@@ -371,28 +422,46 @@ async function main() {
     await waitForLogin(page, origin);
     const entry = await inspectCanvas(ctx, origin);
 
+    // Each later phase is fail-soft so one login yields as much evidence as possible.
     let gsOrigin = null;
     if (entry.gradescopeTabs.length + entry.gradescopeAssignments.length === 0) {
       log("4 launch", "no Gradescope entry point found in any active course");
     } else {
-      gsOrigin = await launchGradescope(ctx, page, origin, entry);
-      if (gsOrigin) await inspectGradescope(page, gsOrigin);
-      else log("4 launch", "FAILED to obtain a Gradescope session");
+      gsOrigin = await phase("4 launch", () => launchGradescope(ctx, page, origin, entry));
+      if (gsOrigin) {
+        const gsCookies = (await ctx.cookies()).filter((c) => GRADESCOPE_HOST.test(c.domain.replace(/^\./, "")));
+        log("4 launch", `Gradescope cookies in browser: ${gsCookies.length}`);
+        await phase("5 gradescope", () => inspectGradescope(page, gsOrigin));
+      } else {
+        log("4 launch", "FAILED to obtain a Gradescope session");
+      }
     }
 
-    await checkPlainHttp(ctx, origin, gsOrigin);
+    await phase("6 plain-http", () => checkPlainHttp(ctx, origin, gsOrigin));
     log("done", "Spike finished. Closing browser and deleting the temporary profile.");
   } finally {
     await browser.close();
   }
 }
 
-main().catch((e) => {
-  // Only print our own messages or the error class, never raw page content.
+// Only print our own messages or the error class, never raw page content.
+function safeError(e) {
+  if (e instanceof SpikeError) return e.message;
   const raw = String(e?.message || "").split("\n")[0].slice(0, 200);
   // Strip query strings: launch URLs carry one-time verifiers.
-  const safe = raw.replace(/\?[^\s"']*/g, "?<redacted>");
-  const msg = e instanceof SpikeError ? e.message : `${e?.name || "Error"}: ${safe}`;
-  console.error(`FAIL: ${msg}`);
+  return `${e?.name || "Error"}: ${raw.replace(/\?[^\s"']*/g, "?<redacted>")}`;
+}
+
+async function phase(step, fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    log(step, `ERROR ${safeError(e)}`);
+    return null;
+  }
+}
+
+main().catch((e) => {
+  console.error(`FAIL: ${safeError(e)}`);
   process.exit(1);
 });
