@@ -12,6 +12,7 @@
   --danger: #c4372f;
   --success: #2f8f5b;
   --late: #c8691c;
+  --overdue: #55575e;
   --focus: #4c6ef5;
   --radius: 10px;
 
@@ -40,6 +41,7 @@
     --danger: #ff7b72;
     --success: #5fcf8e;
     --late: #f0a35e;
+    --overdue: #6a6c74;
     --focus: #8ea2e8;
   }
 }
@@ -718,13 +720,17 @@ legend.settings__label + * {
   font-variant-numeric: tabular-nums;
 }
 
+/* Overdue work recedes: the whole row uses a darker grey (discussion Round 11). */
 .assignment--overdue .status-dot,
 .assignment--overdue .badge {
-  --status-color: var(--muted);
+  --status-color: var(--overdue);
 }
 
-.assignment--overdue .assignment__title {
-  color: var(--muted);
+.assignment--overdue .assignment__title,
+.assignment--overdue .assignment__course,
+.assignment--overdue .assignment__due,
+.assignment--overdue .assignment__note {
+  color: var(--overdue);
 }
 
 .assignment--soon .status-dot,
