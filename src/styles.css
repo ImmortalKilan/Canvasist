@@ -905,3 +905,88 @@ legend.settings__label + * {
   gap: 8px;
   margin-top: 18px;
 }
+
+/* ---------- preference sections ---------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.chip__remove {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chip__remove:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.select {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.course-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.course-list__item + .course-list__item {
+  border-top: 1px solid var(--border);
+}
+
+.course-list__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.course-list__code {
+  font-weight: 600;
+}
+
+.course-list__name {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

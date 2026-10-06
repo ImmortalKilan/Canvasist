@@ -15,7 +15,7 @@ use crate::domain::{is_gradescope_host, Snapshot};
 use crate::error::{AppError, AppResult};
 use crate::locale::{self, Locale};
 use crate::marks::{MarkStore, Marks};
-use crate::settings::{LanguagePreference, SettingsStore};
+use crate::settings::{normalize_reminder_offsets, LanguagePreference, SettingsStore};
 use crate::{http, tray};
 
 #[derive(Debug, Serialize)]
@@ -172,4 +172,72 @@ pub fn dismiss(marks: State<'_, MarkStore>, id: String) -> AppResult<Marks> {
 #[tauri::command]
 pub fn restore(marks: State<'_, MarkStore>, id: String) -> AppResult<Marks> {
     marks.restore(&id)
+}
+
+// ---------- preferences (reminders, hidden courses, display rules) ----------
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preferences {
+    reminder_offsets_minutes: Vec<u32>,
+    hidden_courses: Vec<String>,
+    show_unsubmittable: bool,
+}
+
+fn preferences(store: &SettingsStore) -> Preferences {
+    let s = store.get();
+    Preferences {
+        reminder_offsets_minutes: s.reminder_offsets_minutes,
+        hidden_courses: s.hidden_courses,
+        show_unsubmittable: s.show_unsubmittable,
+    }
+}
+
+#[tauri::command]
+pub fn get_preferences(store: State<'_, SettingsStore>) -> Preferences {
+    preferences(&store)
+}
+
+#[tauri::command]
+pub fn set_reminder_offsets(
+    store: State<'_, SettingsStore>,
+    minutes: Vec<u32>,
+) -> AppResult<Preferences> {
+    let minutes = normalize_reminder_offsets(minutes).ok_or(AppError::InvalidInput)?;
+    store.update(|s| s.reminder_offsets_minutes = minutes)?;
+    Ok(preferences(&store))
+}
+
+#[tauri::command]
+pub fn set_course_hidden(
+    store: State<'_, SettingsStore>,
+    course_id: String,
+    hidden: bool,
+) -> AppResult<Preferences> {
+    let valid = !course_id.is_empty()
+        && course_id.len() <= 64
+        && course_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b':');
+    if !valid {
+        return Err(AppError::InvalidInput);
+    }
+    store.update(|s| {
+        s.hidden_courses.retain(|id| id != &course_id);
+        if hidden {
+            s.hidden_courses.push(course_id);
+        }
+    })?;
+    Ok(preferences(&store))
+}
+
+/// Changing this affects which Canvas items are fetched, so the frontend
+/// refreshes afterwards.
+#[tauri::command]
+pub fn set_show_unsubmittable(
+    store: State<'_, SettingsStore>,
+    show: bool,
+) -> AppResult<Preferences> {
+    store.update(|s| s.show_unsubmittable = show)?;
+    Ok(preferences(&store))
 }

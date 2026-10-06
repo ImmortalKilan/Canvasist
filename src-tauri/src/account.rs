@@ -30,6 +30,8 @@ use crate::error::{AppError, AppResult};
 use crate::gradescope;
 use crate::marks::MarkStore;
 use crate::merge;
+use crate::notify;
+use crate::reminders::ReminderLog;
 use crate::secure_store::SecureStore;
 use crate::settings::SettingsStore;
 use crate::window;
@@ -51,6 +53,7 @@ const CANVAS_SESSION_COOKIES: &[&str] = &[
 
 pub const EVENT_AUTH_CHANGED: &str = "auth-changed";
 pub const EVENT_LOGIN_CANCELLED: &str = "canvas-login-cancelled";
+pub const EVENT_SNAPSHOT_UPDATED: &str = "snapshot-updated";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "camelCase")]
@@ -345,8 +348,12 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
         Ok(data) => data,
         Err(AppError::SessionExpired) => {
             log::info!("Canvas session expired");
-            account.lock().expired = true;
+            let newly_expired = !std::mem::replace(&mut account.lock().expired, true);
             emit_status(app);
+            // One notification per expiry, not one per hourly refresh.
+            if newly_expired {
+                notify::send_session_expired(app);
+            }
             return Err(AppError::SessionExpired);
         }
         Err(e) => return Err(e),
@@ -402,6 +409,10 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
     if was_expired {
         emit_status(app);
     }
+    // Background refreshes reach the window through this event.
+    if let Err(e) = app.emit_to(window::MAIN_LABEL, EVENT_SNAPSHOT_UPDATED, &snapshot) {
+        log::debug!("snapshot-updated not delivered: {e}");
+    }
     Ok(snapshot)
 }
 
@@ -414,6 +425,7 @@ pub fn sign_out(app: &AppHandle) -> AppResult<()> {
     account.store.delete(SESSION_RECORD)?;
     account.store.delete(SNAPSHOT_RECORD)?;
     app.state::<MarkStore>().clear()?;
+    app.state::<ReminderLog>().clear()?;
     wipe_login_data(app)?;
     log::info!("signed out of Canvas");
     emit_status(app);

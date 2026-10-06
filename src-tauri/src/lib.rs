@@ -11,6 +11,9 @@ mod http;
 mod locale;
 mod marks;
 mod merge;
+mod notify;
+mod reminders;
+mod scheduler;
 mod secure_store;
 mod settings;
 mod tray;
@@ -21,6 +24,7 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 use crate::account::Account;
 use crate::marks::MarkStore;
+use crate::reminders::ReminderLog;
 use crate::secure_store::SecureStore;
 use crate::settings::SettingsStore;
 
@@ -49,10 +53,12 @@ pub fn run() {
             account::finish_pending_wipe(app.handle());
             let data_dir = app.path().app_local_data_dir()?;
             app.manage(Account::load(SecureStore::new(data_dir.clone())));
-            app.manage(MarkStore::load(SecureStore::new(data_dir)));
+            app.manage(MarkStore::load(SecureStore::new(data_dir.clone())));
+            app.manage(ReminderLog::load(SecureStore::new(data_dir)));
 
             apply_first_run_defaults(app.handle());
             tray::create(app.handle())?;
+            scheduler::start(app.handle().clone());
 
             let started_by_os = std::env::args().any(|arg| arg == AUTOSTART_ARG);
             if !started_by_os {
@@ -83,6 +89,10 @@ pub fn run() {
             commands::mark_done,
             commands::dismiss,
             commands::restore,
+            commands::get_preferences,
+            commands::set_reminder_offsets,
+            commands::set_course_hidden,
+            commands::set_show_unsubmittable,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Canvasist application");

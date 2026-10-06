@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-reminder-offsets"
+description = "Enables the set_reminder_offsets command without any pre-configured scope."
+commands.allow = ["set_reminder_offsets"]
+
+[[permission]]
+identifier = "deny-set-reminder-offsets"
+description = "Denies the set_reminder_offsets command without any pre-configured scope."
+commands.deny = ["set_reminder_offsets"]

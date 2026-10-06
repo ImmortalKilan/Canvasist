@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AssignmentList } from "./components/AssignmentList";
 import { ConnectView } from "./components/ConnectView";
 import { Header } from "./components/Header";
@@ -14,6 +14,7 @@ import {
   type AuthStatus,
   type Snapshot,
   type LanguagePreference,
+  type Preferences,
   type SettingsView as Settings,
 } from "./ipc";
 
@@ -22,13 +23,15 @@ type View = "home" | "settings";
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
+  const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.getSettings(), api.getAuthStatus()]).then(
-      ([s, a]) => {
+    Promise.all([api.getSettings(), api.getAuthStatus(), api.getPreferences()]).then(
+      ([s, a, p]) => {
         setSettings(s);
         setAuth(a);
+        setPreferences(p);
       },
       (e: unknown) => setLoadError(errorMessage(e)),
     );
@@ -51,14 +54,16 @@ export default function App() {
     );
   }
   // Render nothing until the language is known, to avoid a flash of the wrong language.
-  if (!settings || !auth) return null;
+  if (!settings || !auth || !preferences) return null;
 
   return (
     <I18nProvider locale={settings.effectiveLocale}>
       <Shell
         settings={settings}
         auth={auth}
+        preferences={preferences}
         onAuthChange={setAuth}
+        onPreferencesChange={setPreferences}
         onLanguageChange={changeLanguage}
       />
     </I18nProvider>
@@ -68,11 +73,20 @@ export default function App() {
 interface ShellProps {
   settings: Settings;
   auth: AuthStatus;
+  preferences: Preferences;
   onAuthChange: (auth: AuthStatus) => void;
+  onPreferencesChange: (preferences: Preferences) => void;
   onLanguageChange: (language: LanguagePreference) => Promise<void>;
 }
 
-function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
+function Shell({
+  settings,
+  auth,
+  preferences,
+  onAuthChange,
+  onPreferencesChange,
+  onLanguageChange,
+}: ShellProps) {
   const t = useT();
   const [view, setView] = useState<View>("home");
   const [loginPending, setLoginPending] = useState(false);
@@ -122,11 +136,24 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
         onAuthChange(status);
       }),
       events.onLoginCancelled(() => setLoginPending(false)),
+      // Hourly and wake-up refreshes run in the background and arrive here.
+      events.onSnapshotUpdated(setSnapshot),
     ];
     return () => {
       for (const s of subscriptions) void s.then((unlisten) => unlisten());
     };
   }, [onAuthChange]);
+
+  // Hidden courses (settings) are filtered out of the list here.
+  const visibleSnapshot = useMemo(() => {
+    if (!snapshot || preferences.hiddenCourses.length === 0) return snapshot;
+    const hidden = new Set(preferences.hiddenCourses);
+    return {
+      ...snapshot,
+      courses: snapshot.courses.filter((c) => !hidden.has(c.id)),
+      assignments: snapshot.assignments.filter((a) => !hidden.has(a.courseId)),
+    };
+  }, [snapshot, preferences.hiddenCourses]);
 
   const startLogin = useCallback(async (origin: string) => {
     await api.startCanvasLogin(origin);
@@ -145,6 +172,14 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
           <SettingsView
             language={settings.language}
             auth={auth}
+            preferences={preferences}
+            courses={snapshot?.courses ?? []}
+            onPreferencesChange={(next) => {
+              const refetch = next.showUnsubmittable !== preferences.showUnsubmittable;
+              onPreferencesChange(next);
+              // That setting changes which Canvas items are fetched.
+              if (refetch) void refresh();
+            }}
             onLanguageChange={onLanguageChange}
             onSignOut={signOut}
             onBack={() => setView("home")}
@@ -204,7 +239,7 @@ function Shell({ settings, auth, onAuthChange, onLanguageChange }: ShellProps) {
               </p>
             )}
             <AssignmentList
-              snapshot={snapshot}
+              snapshot={visibleSnapshot}
               locale={settings.effectiveLocale}
               error={refreshError}
             />

@@ -1,12 +1,23 @@
 import { useEffect, useState } from "react";
 import { hostOf } from "../format";
 import { useT } from "../i18n/context";
-import { api, errorMessage, type AuthStatus, type LanguagePreference } from "../ipc";
+import {
+  api,
+  errorMessage,
+  type AuthStatus,
+  type Course,
+  type LanguagePreference,
+  type Preferences,
+} from "../ipc";
 import { BackIcon } from "./icons";
+import { CourseSettings, ReminderSettings, UnsubmittableSetting } from "./PreferenceSections";
 
 interface Props {
   language: LanguagePreference;
   auth: AuthStatus;
+  preferences: Preferences;
+  courses: readonly Course[];
+  onPreferencesChange: (preferences: Preferences) => void;
   onLanguageChange: (language: LanguagePreference) => Promise<void>;
   onSignOut: () => Promise<void>;
   onBack: () => void;
@@ -19,7 +30,16 @@ const LANGUAGE_OPTIONS: readonly { value: LanguagePreference; nativeLabel?: stri
   { value: "zh-CN", nativeLabel: "简体中文" },
 ];
 
-export function SettingsView({ language, auth, onLanguageChange, onSignOut, onBack }: Props) {
+export function SettingsView({
+  language,
+  auth,
+  preferences,
+  courses,
+  onPreferencesChange,
+  onLanguageChange,
+  onSignOut,
+  onBack,
+}: Props) {
   const t = useT();
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [version, setVersion] = useState("");
@@ -120,6 +140,33 @@ export function SettingsView({ language, auth, onLanguageChange, onSignOut, onBa
           <span className="switch__thumb" />
         </button>
       </div>
+
+      {auth.state !== "signedOut" && (
+        <>
+          <ReminderSettings
+            offsets={preferences.reminderOffsetsMinutes}
+            disabled={busy}
+            onChange={(minutes) =>
+              run(async () => onPreferencesChange(await api.setReminderOffsets(minutes)))
+            }
+          />
+          <CourseSettings
+            courses={courses}
+            hidden={preferences.hiddenCourses}
+            disabled={busy}
+            onToggle={(id, hidden) =>
+              run(async () => onPreferencesChange(await api.setCourseHidden(id, hidden)))
+            }
+          />
+          <UnsubmittableSetting
+            checked={preferences.showUnsubmittable}
+            disabled={busy}
+            onChange={(show) =>
+              run(async () => onPreferencesChange(await api.setShowUnsubmittable(show)))
+            }
+          />
+        </>
+      )}
 
       {auth.state !== "signedOut" && (
         <div className="settings__group">

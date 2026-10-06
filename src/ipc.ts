@@ -59,6 +59,13 @@ export interface Assignment {
   canvasDueAt: string | null;
 }
 
+export interface Preferences {
+  /** Minutes before a deadline at which to remind, largest first. */
+  reminderOffsetsMinutes: number[];
+  hiddenCourses: string[];
+  showUnsubmittable: boolean;
+}
+
 /** The user's local marks: assignment ID -> when it was marked. */
 export interface Marks {
   done: Record<string, string>;
@@ -116,6 +123,13 @@ export const api = {
   markDone: (id: string) => invoke<Marks>("mark_done", { id }),
   dismiss: (id: string) => invoke<Marks>("dismiss", { id }),
   restore: (id: string) => invoke<Marks>("restore", { id }),
+
+  getPreferences: () => invoke<Preferences>("get_preferences"),
+  setReminderOffsets: (minutes: number[]) =>
+    invoke<Preferences>("set_reminder_offsets", { minutes }),
+  setCourseHidden: (courseId: string, hidden: boolean) =>
+    invoke<Preferences>("set_course_hidden", { courseId, hidden }),
+  setShowUnsubmittable: (show: boolean) => invoke<Preferences>("set_show_unsubmittable", { show }),
 };
 
 export const events = {
@@ -123,6 +137,8 @@ export const events = {
     listen<AuthStatus>("auth-changed", (e) => handler(e.payload)),
   onLoginCancelled: (handler: () => void): Promise<UnlistenFn> =>
     listen("canvas-login-cancelled", () => handler()),
+  onSnapshotUpdated: (handler: (snapshot: Snapshot) => void): Promise<UnlistenFn> =>
+    listen<Snapshot>("snapshot-updated", (e) => handler(e.payload)),
 };
 
 function isAppError(e: unknown): e is AppError {

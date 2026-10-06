@@ -26,7 +26,7 @@ pub enum LanguagePreference {
     ZhCn,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub language: LanguagePreference,
@@ -35,6 +35,39 @@ pub struct Settings {
     pub autostart_initialized: bool,
     /// Also show Canvas items that need no submission or are not graded.
     pub show_unsubmittable: bool,
+    /// Minutes before a deadline at which to remind, largest first.
+    pub reminder_offsets_minutes: Vec<u32>,
+    /// Course IDs the user hid; their assignments are neither shown nor reminded.
+    pub hidden_courses: Vec<String>,
+}
+
+/// Default reminders: 24 hours and 3 hours before a deadline (discussion Round 10).
+pub const DEFAULT_REMINDER_OFFSETS: [u32; 2] = [24 * 60, 3 * 60];
+/// Reminder offsets must lie between 5 minutes and 14 days.
+pub const REMINDER_OFFSET_RANGE: std::ops::RangeInclusive<u32> = 5..=14 * 24 * 60;
+pub const MAX_REMINDERS: usize = 8;
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            language: LanguagePreference::default(),
+            autostart_initialized: false,
+            show_unsubmittable: false,
+            reminder_offsets_minutes: DEFAULT_REMINDER_OFFSETS.to_vec(),
+            hidden_courses: Vec::new(),
+        }
+    }
+}
+
+/// Validates user-chosen reminder offsets and returns them deduplicated,
+/// largest first. `None` when the input is out of range.
+pub fn normalize_reminder_offsets(mut offsets: Vec<u32>) -> Option<Vec<u32>> {
+    if offsets.len() > MAX_REMINDERS || offsets.iter().any(|m| !REMINDER_OFFSET_RANGE.contains(m)) {
+        return None;
+    }
+    offsets.sort_unstable_by(|a, b| b.cmp(a));
+    offsets.dedup();
+    Some(offsets)
 }
 
 pub struct SettingsStore {
@@ -144,6 +177,32 @@ mod tests {
         let store = SettingsStore::load(dir.path());
         assert_eq!(store.get().language, LanguagePreference::En);
         assert!(!store.get().autostart_initialized);
+    }
+
+    #[test]
+    fn defaults_include_reminders() {
+        assert_eq!(
+            Settings::default().reminder_offsets_minutes,
+            vec![1440, 180]
+        );
+        // A settings file from before reminders existed still gets the defaults.
+        let old: Settings = serde_json::from_str(r#"{"language":"en"}"#).unwrap();
+        assert_eq!(old.reminder_offsets_minutes, vec![1440, 180]);
+    }
+
+    #[test]
+    fn reminder_offsets_are_validated() {
+        assert_eq!(
+            normalize_reminder_offsets(vec![60, 1440, 60]),
+            Some(vec![1440, 60])
+        );
+        assert_eq!(normalize_reminder_offsets(vec![]), Some(vec![]));
+        assert_eq!(normalize_reminder_offsets(vec![1]), None);
+        assert_eq!(normalize_reminder_offsets(vec![15 * 24 * 60]), None);
+        assert_eq!(
+            normalize_reminder_offsets(vec![60; MAX_REMINDERS + 1]),
+            None
+        );
     }
 
     #[test]
