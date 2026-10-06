@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import { hostOf } from "../format";
 import { useT } from "../i18n/context";
-import { api, errorMessage, type LanguagePreference } from "../ipc";
+import { api, errorMessage, type AuthStatus, type LanguagePreference } from "../ipc";
 import { BackIcon } from "./icons";
 
 interface Props {
   language: LanguagePreference;
+  auth: AuthStatus;
   onLanguageChange: (language: LanguagePreference) => Promise<void>;
+  onSignOut: () => Promise<void>;
   onBack: () => void;
 }
 
@@ -16,12 +19,13 @@ const LANGUAGE_OPTIONS: readonly { value: LanguagePreference; nativeLabel?: stri
   { value: "zh-CN", nativeLabel: "简体中文" },
 ];
 
-export function SettingsView({ language, onLanguageChange, onBack }: Props) {
+export function SettingsView({ language, auth, onLanguageChange, onSignOut, onBack }: Props) {
   const t = useT();
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [version, setVersion] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +73,7 @@ export function SettingsView({ language, onLanguageChange, onBack }: Props) {
       </div>
 
       {error && (
-        <p className="settings__error" role="alert">
+        <p className="form-error" role="alert">
           {t("error.generic", { message: error })}
         </p>
       )}
@@ -116,6 +120,54 @@ export function SettingsView({ language, onLanguageChange, onBack }: Props) {
           <span className="switch__thumb" />
         </button>
       </div>
+
+      {auth.state !== "signedOut" && (
+        <div className="settings__group">
+          <p className="settings__label">{t("settings.account")}</p>
+          <p className="settings__hint">
+            {t("settings.account.connected", { site: hostOf(auth.origin) })}
+          </p>
+          {confirmingSignOut ? (
+            <div className="confirm" role="group" aria-label={t("settings.signOut.confirm")}>
+              <p className="confirm__text">{t("settings.signOut.confirm")}</p>
+              <div className="confirm__actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => setConfirmingSignOut(false)}
+                >
+                  {t("settings.signOut.no")}
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await onSignOut();
+                      setConfirmingSignOut(false);
+                    })
+                  }
+                >
+                  {t("settings.signOut.yes")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="settings__hint">{t("settings.signOut.hint")}</p>
+              <button
+                type="button"
+                className="secondary-button settings__action"
+                onClick={() => setConfirmingSignOut(true)}
+              >
+                {t("settings.signOut")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="settings__group">
         <p className="settings__label">{t("settings.about")}</p>

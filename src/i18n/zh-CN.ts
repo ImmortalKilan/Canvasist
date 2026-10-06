@@ -3,14 +3,44 @@ import type { MessageKey } from "./en";
 // Typed against the English catalog, so a missing or extra key fails the build.
 export const zhCN: Record<MessageKey, string> = {
   "header.refresh": "刷新",
-  "header.refreshUnavailable": "连接 Canvas 后即可刷新",
+  "header.refreshing": "正在刷新…",
   "header.settings": "设置",
 
-  "empty.title": "尚未连接 Canvas",
-  "empty.body":
+  "connect.title": "连接 Canvas",
+  "connect.body":
     "连接你学校的 Canvas 账户，即可在一个地方看到所有 Canvas 与 Gradescope 的截止时间。",
-  "empty.connect": "连接 Canvas",
-  "empty.comingSoon": "将在下一个版本中提供",
+  "connect.searchLabel": "搜索你的学校",
+  "connect.searchPlaceholder": "输入学校名称",
+  "connect.searching": "正在搜索…",
+  "connect.noResults": "没有找到学校。",
+  "connect.manualLink": "找不到？手动输入 Canvas 网址",
+  "connect.manualLabel": "Canvas 网址",
+  "connect.manualPlaceholder": "canvas.yourschool.edu",
+  "connect.manualSubmit": "继续",
+  "connect.checking": "正在检查…",
+  "connect.backToSearch": "改为搜索学校名",
+  "connect.privacy":
+    "你将在学校自己的页面上登录。Canvasist 不会接触你的密码，所有数据都只保存在这台电脑上。",
+
+  "login.title": "请登录 Canvas",
+  "login.body": "请在刚刚弹出的窗口中完成登录，登录成功后窗口会自动关闭。",
+  "login.cancel": "取消",
+
+  "list.label": "作业",
+  "list.loading": "正在加载作业…",
+  "list.empty": "本学期暂无作业。",
+  "list.updated": "更新于 {time}",
+  "list.openInCanvas": "在 Canvas 中打开",
+
+  "status.notSubmitted": "未提交",
+  "status.submitted": "已提交",
+  "status.late": "迟交",
+  "status.graded": "已评分",
+  "status.missing": "缺交",
+  "status.excused": "已免除",
+
+  "banner.expired": "Canvas 登录已过期。",
+  "banner.relogin": "重新登录",
 
   "settings.title": "设置",
   "settings.back": "返回",
@@ -18,8 +48,21 @@ export const zhCN: Record<MessageKey, string> = {
   "settings.language.system": "跟随系统",
   "settings.autostart": "登录 Windows 时自动启动",
   "settings.autostart.hint": "Canvasist 会安静地运行在系统托盘中，确保提醒正常工作。",
+  "settings.account": "Canvas 账户",
+  "settings.account.connected": "已连接：{site}",
+  "settings.signOut": "退出登录",
+  "settings.signOut.hint": "将从这台电脑上删除已保存的登录状态、作业缓存和登录数据。",
+  "settings.signOut.confirm": "确定退出并删除所有本地数据？",
+  "settings.signOut.yes": "确定退出",
+  "settings.signOut.no": "取消",
   "settings.about": "关于",
   "settings.version": "版本 {version}",
 
   "error.generic": "出现错误：{message}",
+  "error.network": "无法连接服务器，请检查网络连接。",
+  "error.invalidUrl": "这不是一个有效的网址。",
+  "error.notCanvas": "这个网址上没有找到 Canvas。",
+  "error.sessionExpired": "Canvas 登录已过期，请重新登录。",
+  "error.canvas": "Canvas 返回了错误（{message}）。",
+  "error.busy": "正在刷新中。",
 };

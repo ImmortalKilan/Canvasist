@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { MessageKey } from "./en";
 import { translate, type Locale, type TranslateParams } from "./translate";
 
-type TranslateFn = (key: MessageKey, params?: TranslateParams) => string;
+export type TranslateFn = (key: MessageKey, params?: TranslateParams) => string;
 
 const I18nContext = createContext<TranslateFn | null>(null);
 

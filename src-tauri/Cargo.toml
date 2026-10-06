@@ -22,11 +22,24 @@ tauri = { version = "2.12", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sys-locale = "0.3"
 thiserror = "2"
+# Windows' own TLS stack (SChannel): honours the system certificate store, which
+# matters on school networks, and needs no extra native build tooling.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "cookies", "json", "query", "gzip", "charset", "http2", "system-proxy"] }
+# Default features off: no public-suffix list download, and cookie values are
+# never written to logs (`log_secure_cookie_values` stays disabled).
+cookie_store = { version = "0.22", default-features = false, features = ["serde_json"] }
+url = { version = "2", features = ["serde"] }
+time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [dev-dependencies]
 tempfile = "3"

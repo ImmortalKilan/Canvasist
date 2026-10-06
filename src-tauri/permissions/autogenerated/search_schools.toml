@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-search-schools"
+description = "Enables the search_schools command without any pre-configured scope."
+commands.allow = ["search_schools"]
+
+[[permission]]
+identifier = "deny-search-schools"
+description = "Denies the search_schools command without any pre-configured scope."
+commands.deny = ["search_schools"]

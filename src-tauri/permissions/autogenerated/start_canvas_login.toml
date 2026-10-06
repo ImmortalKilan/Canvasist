@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-canvas-login"
+description = "Enables the start_canvas_login command without any pre-configured scope."
+commands.allow = ["start_canvas_login"]
+
+[[permission]]
+identifier = "deny-start-canvas-login"
+description = "Denies the start_canvas_login command without any pre-configured scope."
+commands.deny = ["start_canvas_login"]

@@ -8,6 +8,15 @@ fn main() {
             "get_autostart",
             "set_autostart",
             "get_app_info",
+            "search_schools",
+            "check_canvas_url",
+            "start_canvas_login",
+            "cancel_canvas_login",
+            "get_auth_status",
+            "sign_out",
+            "get_canvas_snapshot",
+            "refresh_canvas",
+            "open_external",
         ]),
     ))
     .expect("failed to run tauri-build");

@@ -33,6 +33,8 @@ pub struct Settings {
     /// Set once the first-run autostart default has been applied, so the app
     /// never re-enables autostart after the user turned it off.
     pub autostart_initialized: bool,
+    /// Also show Canvas items that need no submission or are not graded.
+    pub show_unsubmittable: bool,
 }
 
 pub struct SettingsStore {

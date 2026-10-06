@@ -1,22 +1,32 @@
 import { useT } from "../i18n/context";
 import { RefreshIcon, SettingsIcon } from "./icons";
 
-export function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
+interface Props {
+  canRefresh: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onOpenSettings: () => void;
+}
+
+export function Header({ canRefresh, refreshing, onRefresh, onOpenSettings }: Props) {
   const t = useT();
+  const refreshLabel = refreshing ? t("header.refreshing") : t("header.refresh");
   return (
     <header className="header">
       <h1 className="header__title">Canvasist</h1>
       <div className="header__actions">
-        {/* Refreshing becomes available once Canvas is connected (M2). */}
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={t("header.refresh")}
-          title={t("header.refreshUnavailable")}
-          disabled
-        >
-          <RefreshIcon />
-        </button>
+        {canRefresh && (
+          <button
+            type="button"
+            className={`icon-button${refreshing ? " icon-button--spinning" : ""}`}
+            aria-label={refreshLabel}
+            title={refreshLabel}
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            <RefreshIcon />
+          </button>
+        )}
         <button
           type="button"
           className="icon-button"

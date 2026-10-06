@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-canvas-url"
+description = "Enables the check_canvas_url command without any pre-configured scope."
+commands.allow = ["check_canvas_url"]
+
+[[permission]]
+identifier = "deny-check-canvas-url"
+description = "Denies the check_canvas_url command without any pre-configured scope."
+commands.deny = ["check_canvas_url"]

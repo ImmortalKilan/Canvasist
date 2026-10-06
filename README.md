@@ -23,7 +23,12 @@ Gradescope assignments often don't appear in Canvas's assignment list, so checki
 
 ## Privacy
 
-Canvasist runs entirely on your computer. Your Canvas credentials are encrypted with the operating system's protection and are only ever sent to your own Canvas server. There is no Canvasist backend, telemetry or analytics.
+Canvasist runs entirely on your computer. There is no Canvasist backend, telemetry or analytics.
+
+- You sign in on your school's own Canvas login page inside a separate window; Canvasist never sees your password.
+- The resulting session and any cached assignments are encrypted with Windows DPAPI, so only your Windows account can read them, and they are only ever sent to your own Canvas site (and, later, Gradescope).
+- School search sends the name you type to Instructure's public school directory (the same one the official Canvas apps use). Entering your Canvas address directly skips this.
+- Signing out deletes the saved session, cached assignments and the login window's browser data.
 
 ## Platform support
 

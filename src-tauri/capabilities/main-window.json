@@ -8,6 +8,17 @@
     "allow-set-language",
     "allow-get-autostart",
     "allow-set-autostart",
-    "allow-get-app-info"
+    "allow-get-app-info",
+    "allow-search-schools",
+    "allow-check-canvas-url",
+    "allow-start-canvas-login",
+    "allow-cancel-canvas-login",
+    "allow-get-auth-status",
+    "allow-sign-out",
+    "allow-get-canvas-snapshot",
+    "allow-refresh-canvas",
+    "allow-open-external",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

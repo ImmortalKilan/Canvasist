@@ -1,8 +1,13 @@
 //! Canvasist desktop application.
 
+mod account;
+mod canvas;
 mod commands;
+mod dpapi;
 mod error;
+mod http;
 mod locale;
+mod secure_store;
 mod settings;
 mod tray;
 mod window;
@@ -10,6 +15,8 @@ mod window;
 use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
+use crate::account::Account;
+use crate::secure_store::SecureStore;
 use crate::settings::SettingsStore;
 
 /// Argument the OS autostart entry launches us with; the app then starts
@@ -28,9 +35,15 @@ pub fn run() {
             Some(vec![AUTOSTART_ARG]),
         ))
         .plugin(logger())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             app.manage(SettingsStore::load(&config_dir));
+
+            // Must run before any webview exists, while no files are locked.
+            account::finish_pending_wipe(app.handle());
+            let data_dir = app.path().app_local_data_dir()?;
+            app.manage(Account::load(SecureStore::new(data_dir)));
 
             apply_first_run_defaults(app.handle());
             tray::create(app.handle())?;
@@ -51,6 +64,15 @@ pub fn run() {
             commands::get_autostart,
             commands::set_autostart,
             commands::get_app_info,
+            commands::search_schools,
+            commands::check_canvas_url,
+            commands::start_canvas_login,
+            commands::cancel_canvas_login,
+            commands::get_auth_status,
+            commands::sign_out,
+            commands::get_canvas_snapshot,
+            commands::refresh_canvas,
+            commands::open_external,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Canvasist application");
