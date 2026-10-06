@@ -12,7 +12,7 @@ Gradescope assignments often don't appear in Canvas's assignment list, so checki
 
 ## Planned features
 
-- Works with most Canvas instances — you supply your school's Canvas URL and a personal access token
+- Works with most Canvas instances — just point it at your school's Canvas URL
 - Gradescope access through your Canvas LTI integration (no separate Gradescope login)
 - Current-term assignments, quizzes and graded discussions
 - Detailed status: not submitted, submitted, late, graded, missing, dismissed
@@ -23,7 +23,7 @@ Gradescope assignments often don't appear in Canvas's assignment list, so checki
 
 ## Privacy
 
-Canvasist runs entirely on your computer. Your Canvas token is stored in the operating system's credential store and is only ever sent to your own Canvas server. There is no Canvasist backend, telemetry or analytics.
+Canvasist runs entirely on your computer. Your Canvas credentials are encrypted with the operating system's protection and are only ever sent to your own Canvas server. There is no Canvasist backend, telemetry or analytics.
 
 ## Platform support
 
