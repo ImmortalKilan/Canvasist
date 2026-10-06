@@ -29,7 +29,15 @@ export const zhCN: Record<MessageKey, string> = {
   "list.label": "作业",
   "list.loading": "正在加载作业…",
   "list.empty": "本学期暂无作业。",
+  "list.allDone": "所有作业都已完成。",
   "list.updated": "更新于 {time}",
+
+  "group.overdue": "已逾期",
+  "group.today": "今天",
+  "group.tomorrow": "明天",
+  "group.thisWeek": "本周",
+  "group.later": "之后",
+  "group.completed": "已完成",
   "list.openInCanvas": "在 Canvas 中打开",
 
   "status.notSubmitted": "未提交",

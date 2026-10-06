@@ -550,6 +550,58 @@ legend.settings__label + * {
   font-variant-numeric: tabular-nums;
 }
 
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 2px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.group__header--toggle {
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.group__header--toggle:hover {
+  color: var(--text);
+}
+
+.group__count {
+  font-weight: 400;
+}
+
+.group__count::before {
+  content: "· ";
+}
+
+.chevron {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.chevron--open {
+  transform: rotate(45deg);
+}
+
+.assignment--done .assignment__title {
+  color: var(--muted);
+}
+
 .assignments__updated {
   font-size: 12px;
   color: var(--muted);

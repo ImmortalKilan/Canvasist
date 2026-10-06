@@ -28,7 +28,15 @@ export const en = {
   "list.label": "Assignments",
   "list.loading": "Loading assignments…",
   "list.empty": "No assignments this term.",
+  "list.allDone": "You're all caught up.",
   "list.updated": "Updated {time}",
+
+  "group.overdue": "Overdue",
+  "group.today": "Today",
+  "group.tomorrow": "Tomorrow",
+  "group.thisWeek": "This week",
+  "group.later": "Later",
+  "group.completed": "Completed",
   "list.openInCanvas": "Open in Canvas",
 
   "status.notSubmitted": "Not submitted",

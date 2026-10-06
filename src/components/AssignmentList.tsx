@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { describeError } from "../errors";
 import { formatDue, formatTime } from "../format";
+import { GROUP_ORDER, groupAssignments, type GroupKey } from "../grouping";
 import { useT } from "../i18n/context";
 import type { Locale } from "../i18n/translate";
-import { api, type AppError, type CanvasSnapshot } from "../ipc";
+import { api, type AppError, type Assignment, type CanvasSnapshot } from "../ipc";
 
 interface Props {
   snapshot: CanvasSnapshot | null;
@@ -13,10 +14,19 @@ interface Props {
 
 export function AssignmentList({ snapshot, locale, error }: Props) {
   const t = useT();
+  const [showCompleted, setShowCompleted] = useState(false);
   const courseCodes = useMemo(
     () => new Map(snapshot?.courses.map((c) => [c.id, c.code]) ?? []),
     [snapshot],
   );
+  // Regrouped whenever new data arrives, so items move between groups after each refresh.
+  const groups = useMemo(
+    () => (snapshot ? groupAssignments(snapshot.assignments, new Date()) : null),
+    [snapshot],
+  );
+
+  const completed = groups?.get("completed") ?? [];
+  const openCount = snapshot ? snapshot.assignments.length - completed.length : 0;
 
   return (
     <section className="assignments" aria-label={t("list.label")}>
@@ -29,41 +39,107 @@ export function AssignmentList({ snapshot, locale, error }: Props) {
       {snapshot && snapshot.assignments.length === 0 && (
         <p className="form-hint">{t("list.empty")}</p>
       )}
-      {snapshot && snapshot.assignments.length > 0 && (
-        <ul className="assignment-list">
-          {snapshot.assignments.map((a) => {
-            const url = a.url;
-            return (
-              <li key={a.id}>
-                <button
-                  type="button"
-                  className="assignment"
-                  disabled={!url}
-                  title={t("list.openInCanvas")}
-                  onClick={() => {
-                    if (url) void api.openExternal(url);
-                  }}
-                >
-                  <span className={`status-dot status-dot--${a.status}`} aria-hidden="true" />
-                  <span className="assignment__main">
-                    <span className="assignment__course">{courseCodes.get(a.courseId)}</span>
-                    <span className="assignment__title">{a.title}</span>
-                  </span>
-                  <span className="assignment__meta">
-                    <span className="assignment__due">{formatDue(a.dueAt, locale)}</span>
-                    <span className={`badge badge--${a.status}`}>{t(`status.${a.status}`)}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      {snapshot && snapshot.assignments.length > 0 && openCount === 0 && (
+        <p className="form-hint">{t("list.allDone")}</p>
       )}
+
+      {groups &&
+        GROUP_ORDER.filter((key) => key !== "completed").map((key) => {
+          const items = groups.get(key) ?? [];
+          if (items.length === 0) return null;
+          return (
+            <Group key={key} title={t(`group.${key}`)} count={items.length}>
+              <Rows items={items} group={key} courseCodes={courseCodes} locale={locale} />
+            </Group>
+          );
+        })}
+
+      {completed.length > 0 && (
+        <div className="group">
+          <button
+            type="button"
+            className="group__header group__header--toggle"
+            aria-expanded={showCompleted}
+            aria-controls="completed-list"
+            onClick={() => setShowCompleted((v) => !v)}
+          >
+            <span
+              className={`chevron${showCompleted ? " chevron--open" : ""}`}
+              aria-hidden="true"
+            />
+            {t("group.completed")}
+            <span className="group__count">{completed.length}</span>
+          </button>
+          {showCompleted && (
+            <div id="completed-list">
+              <Rows items={completed} group="completed" courseCodes={courseCodes} locale={locale} />
+            </div>
+          )}
+        </div>
+      )}
+
       {snapshot && (
         <p className="assignments__updated">
           {t("list.updated", { time: formatTime(snapshot.fetchedAt, locale) })}
         </p>
       )}
     </section>
+  );
+}
+
+function Group({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  return (
+    <div className="group">
+      <h3 className="group__header">
+        {title}
+        <span className="group__count">{count}</span>
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+interface RowsProps {
+  items: readonly Assignment[];
+  group: GroupKey;
+  courseCodes: ReadonlyMap<string, string>;
+  locale: Locale;
+}
+
+function Rows({ items, group, courseCodes, locale }: RowsProps) {
+  const t = useT();
+  // Today and tomorrow already name the day, so only the time is shown.
+  const timeOnly = group === "today" || group === "tomorrow";
+  return (
+    <ul className="assignment-list">
+      {items.map((a) => {
+        const url = a.url;
+        return (
+          <li key={a.id}>
+            <button
+              type="button"
+              className={`assignment${group === "completed" ? " assignment--done" : ""}`}
+              disabled={!url}
+              title={t("list.openInCanvas")}
+              onClick={() => {
+                if (url) void api.openExternal(url);
+              }}
+            >
+              <span className={`status-dot status-dot--${a.status}`} aria-hidden="true" />
+              <span className="assignment__main">
+                <span className="assignment__course">{courseCodes.get(a.courseId)}</span>
+                <span className="assignment__title">{a.title}</span>
+              </span>
+              <span className="assignment__meta">
+                <span className="assignment__due">
+                  {timeOnly ? formatTime(a.dueAt, locale) : formatDue(a.dueAt, locale)}
+                </span>
+                <span className={`badge badge--${a.status}`}>{t(`status.${a.status}`)}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
