@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Least-privilege capability for the bundled main window. Remote pages (such as a school's Canvas login page) are never granted any capability.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-get-settings",
+    "allow-set-language",
+    "allow-get-autostart",
+    "allow-set-autostart",
+    "allow-get-app-info"
+  ]
+}

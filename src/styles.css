@@ -1,0 +1,339 @@
+/* Design tokens. Dark mode follows the operating system. */
+:root {
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --text: #1c1d21;
+  --muted: #6b6d75;
+  --border: #e3e3de;
+  --hover: rgba(28, 29, 33, 0.06);
+  --accent: #2b3a67;
+  --accent-text: #ffffff;
+  --accent-warm: #e0a12e;
+  --danger: #c4372f;
+  --focus: #4c6ef5;
+  --radius: 10px;
+
+  color-scheme: light dark;
+  font-family:
+    "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181b;
+    --surface: #202125;
+    --text: #ececef;
+    --muted: #9a9ca5;
+    --border: #2f3036;
+    --hover: rgba(236, 236, 239, 0.07);
+    --accent: #8ea2e8;
+    --accent-text: #11131a;
+    --accent-warm: #f5b942;
+    --danger: #ff7b72;
+    --focus: #8ea2e8;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  user-select: none;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- layout ---------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.fatal {
+  padding: 24px;
+  color: var(--danger);
+}
+
+/* ---------- header ---------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.header__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.header__actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* ---------- buttons ---------- */
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.primary-button {
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---------- empty state ---------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+  margin: 12vh auto 0;
+  text-align: center;
+}
+
+.empty__title {
+  margin-top: 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.empty__body {
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.empty__note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- settings ---------- */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings__bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -8px 0 4px -8px;
+}
+
+.settings__title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.settings__group {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings__label {
+  padding: 0;
+  font-weight: 600;
+}
+
+/* Floating the legend pulls it inside the fieldset instead of onto its border. */
+legend.settings__label {
+  float: left;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+legend.settings__label + * {
+  clear: both;
+  margin-top: 0;
+}
+
+.settings__hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings__error {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+/* Segmented control built on native radio inputs for keyboard and screen-reader support. */
+.segmented {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--hover);
+}
+
+.segmented__option {
+  flex: 1;
+  position: relative;
+}
+
+.segmented__option input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.segmented__option span {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 7px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.segmented__option input:checked + span {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.segmented__option input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Toggle switch. */
+.switch {
+  flex-shrink: 0;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--accent);
+}
+
+.switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+
+.switch[aria-checked="true"] .switch__thumb {
+  transform: translateX(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch__thumb {
+    transition: none;
+  }
+}

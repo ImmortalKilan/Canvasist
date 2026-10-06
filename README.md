@@ -29,6 +29,29 @@ Canvasist runs entirely on your computer. Your Canvas credentials are encrypted 
 
 Windows first. macOS and Linux may follow.
 
+## Development
+
+**Prerequisites (Windows):** Node.js 24+, the Rust stable toolchain (MSVC), Visual Studio C++ Build Tools, and WebView2 (preinstalled on Windows 11).
+
+```sh
+npm ci                 # install frontend dependencies (install scripts are disabled by .npmrc)
+npm run tauri dev      # run the app with hot reload
+npm run tauri build    # build the release app and installer
+```
+
+Checks run in CI on every pull request:
+
+```sh
+npm run typecheck && npm run lint && npm run format:check && npm test
+cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+```
+
+### Security model
+
+- The main window only loads the bundled UI. A strict Content Security Policy blocks remote scripts, frames and connections.
+- Every Rust command is permission-gated: the main window's capability (`src-tauri/capabilities/main-window.json`) lists exactly the commands it may call. Remote pages get no capabilities.
+- Logs never contain credentials, cookies, or personal data such as course names, assignment titles or grades.
+
 ## License
 
 [MIT](LICENSE)
