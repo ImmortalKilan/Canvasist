@@ -1,4 +1,6 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import process from "node:process";
 
@@ -16,6 +18,10 @@ export default defineConfig({
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
+  },
+  test: {
+    // Snapshots in benchmark/ and throwaway spikes are not part of the app.
+    exclude: [...configDefaults.exclude, "benchmark/**", "spikes/**"],
   },
   envPrefix: ["VITE_", "TAURI_ENV_"],
   build: {
