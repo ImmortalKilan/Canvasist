@@ -104,8 +104,22 @@ pub async fn connect(
         .and_then(|u| u.host_str().map(str::to_owned));
     let on_canvas = host_now.as_deref() == canvas_origin.host_str();
     let on_gradescope = host_now.as_deref().is_some_and(is_gradescope_host);
+    // Cookie names only (never values): shows whether Gradescope signed the
+    // user in under different cookie names than the ones expected.
+    let mut names: Vec<String> = Vec::new();
+    for origin in GRADESCOPE_ORIGINS {
+        let Ok(origin) = Url::parse(origin) else {
+            continue;
+        };
+        for cookie in window.0.cookies_for_url(origin).unwrap_or_default() {
+            if !names.iter().any(|n| n == cookie.name()) {
+                names.push(cookie.name().to_owned());
+            }
+        }
+    }
+    names.sort();
     log::info!(
-        "gradescope: launch timed out (on canvas: {on_canvas}, on gradescope: {on_gradescope})"
+        "gradescope: launch timed out (on canvas: {on_canvas}, on gradescope: {on_gradescope}, gradescope cookie names: {names:?})"
     );
     if !on_canvas && !on_gradescope {
         Err(AppError::SessionExpired)

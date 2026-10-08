@@ -67,11 +67,14 @@ impl GradescopeClient {
             );
             courses.push(to_course(course));
         }
+        let mut terms: Vec<&str> = all.iter().map(|c| c.term.as_str()).collect();
+        terms.dedup();
         // Counts only: logs never contain course names or assignment titles.
         log::info!(
-            "gradescope refresh: {} of {} course(s) in current term, {} row(s), {} assignment(s) shown",
+            "gradescope refresh: {} of {} course(s) in current term ({} term(s) listed), {} row(s), {} assignment(s) shown",
             current.len(),
             all.len(),
+            terms.len(),
             rows_total,
             assignments.len()
         );

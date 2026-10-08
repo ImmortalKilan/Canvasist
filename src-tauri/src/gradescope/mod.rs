@@ -58,7 +58,13 @@ pub async fn refresh(
 
     let tab = match canvas.find_gradescope_tab(course_ids).await {
         Ok(Some(tab)) => tab,
-        Ok(None) => return GradescopeResult::empty(GradescopeState::NotLinked, None),
+        Ok(None) => {
+            log::info!(
+                "gradescope: no Gradescope tab in {} current course(s)",
+                course_ids.len()
+            );
+            return GradescopeResult::empty(GradescopeState::NotLinked, None);
+        }
         Err(AppError::SessionExpired) => {
             return GradescopeResult::empty(GradescopeState::NeedsCanvasLogin, None)
         }
