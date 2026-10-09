@@ -11,6 +11,11 @@ permissions:
 jobs:
   check:
     runs-on: windows-latest
+    defaults:
+      run:
+        # The Windows default (PowerShell) only reports the last command of a
+        # multi-line step; bash runs with -e and stops at the first failure.
+        shell: bash
     steps:
       - uses: actions/checkout@v7
 
