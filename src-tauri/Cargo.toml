@@ -1,6 +1,6 @@
 [package]
 name = "canvasist"
-version = "0.1.0"
+version = "0.1.1"
 description = "Never miss a Canvas or Gradescope deadline again."
 authors = ["ImmortalKilan"]
 license = "MIT"
