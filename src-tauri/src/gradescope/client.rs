@@ -46,6 +46,12 @@ impl GradescopeClient {
         Ok(html)
     }
 
+    /// Succeeds when the cookies belong to a signed-in user; fails with
+    /// [`AppError::GradescopeAuth`] otherwise.
+    pub async fn verify_session(&self) -> AppResult<()> {
+        self.get_html("/account").await.map(|_| ())
+    }
+
     /// Fetches current-term courses and their assignments.
     pub async fn fetch(&self) -> AppResult<(Vec<Course>, Vec<Assignment>)> {
         let now = OffsetDateTime::now_utc();

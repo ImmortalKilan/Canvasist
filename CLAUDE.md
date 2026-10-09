@@ -39,7 +39,9 @@ CI (`.github/workflows/ci.yml`) runs exactly these checks on `windows-latest`. T
   - It never follows redirects (`http.rs`): a 401 or any redirect means the session expired.
   - `discovery.rs` handles school search and checks that an address is a Canvas site.
 - **`gradescope/`**: Gradescope has no API.
-  - `bridge.rs` opens a hidden window (`gradescope-bridge`, sharing `login-webview`), injects the Canvas cookies with `set_cookie` (an explicit domain is required) and opens the course's Gradescope LTI tab. It then copies Gradescope's session cookies into the jar.
+  - `bridge.rs` opens a hidden window (`gradescope-bridge`, sharing `login-webview`) and clears its old Gradescope cookies. It injects the Canvas cookies with `set_cookie` (an explicit domain is required) and opens the course's Gradescope LTI tab.
+  - `launch.js`, an initialization script, retargets Canvas's `tool_form` so the launch runs as the whole page rather than inside Canvas's frame. Cookies set inside the frame are third-party and can be blocked or kept separate on some machines.
+  - Each new set of Gradescope cookies is checked against `/account` (no cookie names are assumed). Cookies that pass are copied into the jar.
   - `client.rs` and `parse.rs` then fetch and scrape the pages over plain HTTP with `scraper`.
   - Gradescope IDs carry a `gs:` prefix.
 - **`merge.rs`** merges Canvas/Gradescope duplicates by normalized title plus a deadline within 24 h, or by Canvas's link to Gradescope. Gradescope's deadline and status win, and a differing Canvas deadline is kept in `canvas_due_at`. Ambiguous matches stay as two entries on purpose.
