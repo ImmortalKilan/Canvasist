@@ -35,7 +35,7 @@ Requires Windows 10 or 11.
 
 1. Open Canvasist and search for your school, or enter your Canvas address (for example `canvas.yourschool.edu`).
 2. A sign-in window shows your school's own login page. Sign in as usual; the window closes by itself.
-3. Your assignments appear. Gradescope connects automatically through Canvas a few seconds later; there's nothing extra to sign in to.
+3. Your assignments appear. Gradescope usually connects automatically through Canvas a few seconds later. If your instructors haven't linked their Gradescope courses to Canvas, Canvasist asks you to sign in to Gradescope once instead.
 
 When your school's Canvas session eventually expires, Canvasist shows a notification and a "Sign in again" button.
 
@@ -43,7 +43,7 @@ When your school's Canvas session eventually expires, Canvasist shows a notifica
 
 - **Sign-in**: a dedicated window loads your school's Canvas login page. Canvasist never sees your password; after you sign in, it copies the resulting session cookies and closes the window. The window has its own browser storage and cannot call any Canvasist functions.
 - **Canvas**: assignments and submission status come from the Canvas REST API, using that session.
-- **Gradescope**: Gradescope has no public API. Canvasist opens your course's Gradescope tab in an invisible window, exactly as you would in a browser, keeps the Gradescope session that results, and then reads your course pages.
+- **Gradescope**: Gradescope has no public API. Canvasist opens your course's Gradescope tab in an invisible window, exactly as you would in a browser, keeps the Gradescope session that results, and then reads your course pages. Gradescope only signs you in this way from a course linked to Canvas. If none of your courses is linked, a window shows Gradescope's own login page so you can sign in once, with the same protections as the Canvas sign-in window.
 - **Background**: while the window is closed, a single lightweight task refreshes hourly (and right after the computer wakes) and checks reminders. No browser runs in the background.
 
 ## Privacy and security
@@ -62,7 +62,7 @@ Found a security problem? Please see [SECURITY.md](SECURITY.md).
 ## Limitations
 
 - Windows only for now.
-- Gradescope support relies on Gradescope's web pages and on your school launching Gradescope from Canvas. If Gradescope changes its pages, an update may be needed.
+- Gradescope support relies on Gradescope's web pages. If Gradescope changes them, an update may be needed.
 - Only the current term is shown.
 
 ## Development
