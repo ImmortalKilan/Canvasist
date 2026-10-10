@@ -4,7 +4,7 @@
 //! `capabilities/main-window.json`; otherwise the frontend cannot call it.
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
@@ -16,7 +16,7 @@ use crate::error::{AppError, AppResult};
 use crate::locale::{self, Locale};
 use crate::marks::{MarkStore, Marks};
 use crate::settings::{normalize_reminder_offsets, LanguagePreference, SettingsStore};
-use crate::{http, tray};
+use crate::{gradescope, http, tray};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,6 +106,19 @@ pub async fn start_canvas_login(app: AppHandle, origin: String) -> AppResult<()>
 #[tauri::command]
 pub fn cancel_canvas_login(app: AppHandle) {
     account::cancel_login(&app);
+}
+
+/// Opens Gradescope's own sign-in page, for courses that Gradescope does not
+/// open from Canvas. The site is chosen by the backend, never by the frontend.
+/// Async like `start_canvas_login`: creating a window from a synchronous
+/// command deadlocks on Windows.
+#[tauri::command]
+pub async fn start_gradescope_login(app: AppHandle) -> AppResult<()> {
+    let account = app.state::<Account>();
+    if !matches!(account.status(), AuthStatus::SignedIn { .. }) {
+        return Err(AppError::NotSignedIn);
+    }
+    gradescope::login::start(&app, account.gradescope_login_origin()?)
 }
 
 #[tauri::command]

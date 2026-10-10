@@ -98,24 +98,31 @@ impl CanvasClient {
         })
     }
 
-    /// Returns the absolute URL of the first Gradescope navigation tab found in
-    /// the given courses, which is where the Gradescope LTI launch starts.
-    pub async fn find_gradescope_tab(&self, course_ids: &[String]) -> AppResult<Option<Url>> {
+    /// Returns the absolute URLs of the Gradescope navigation tabs in the given
+    /// courses (at most `limit`, in course order), which is where the
+    /// Gradescope LTI launch starts.
+    pub async fn find_gradescope_tabs(
+        &self,
+        course_ids: &[String],
+        limit: usize,
+    ) -> AppResult<Vec<Url>> {
+        let mut found = Vec::new();
         for course_id in course_ids {
+            if found.len() >= limit {
+                break;
+            }
             let path = format!("/api/v1/courses/{course_id}/tabs");
             let tabs: Vec<model::RawTab> = match self.get_paginated(&path).await {
                 Ok(tabs) => tabs,
                 Err(AppError::CanvasStatus(403 | 404)) => continue,
                 Err(e) => return Err(e),
             };
-            if let Some(url) = tabs
-                .iter()
-                .find_map(|t| model::gradescope_tab_url(t, &self.origin))
-            {
-                return Ok(Some(url));
-            }
+            found.extend(
+                tabs.iter()
+                    .find_map(|t| model::gradescope_tab_url(t, &self.origin)),
+            );
         }
-        Ok(None)
+        Ok(found)
     }
 
     async fn get_json<T: DeserializeOwned>(&self, path: &str) -> AppResult<T> {

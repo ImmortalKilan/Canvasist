@@ -20,6 +20,9 @@ import {
 
 type View = "home" | "settings";
 
+const BUSY_RETRIES = 60;
+const BUSY_RETRY_MS = 2000;
+
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -94,16 +97,28 @@ function Shell({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<AppError | null>(null);
 
-  const refresh = useCallback(async () => {
+  // `waitIfBusy`: a refresh that is already running started before something
+  // changed (such as a Gradescope sign-in), so wait for it and run again.
+  const refresh = useCallback(async (waitIfBusy = false) => {
     setRefreshing(true);
     setRefreshError(null);
     try {
-      setSnapshot(await api.refresh());
-    } catch (e) {
-      const error = toAppError(e);
-      // "busy" means a refresh is already running; its result will arrive on its own.
-      // "sessionExpired" is shown by the banner via the auth-changed event.
-      if (error.kind !== "busy" && error.kind !== "sessionExpired") setRefreshError(error);
+      for (let attempt = 1; ; attempt++) {
+        try {
+          setSnapshot(await api.refresh());
+          return;
+        } catch (e) {
+          const error = toAppError(e);
+          if (error.kind === "busy" && waitIfBusy && attempt < BUSY_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_MS));
+            continue;
+          }
+          // "busy" means a refresh is already running; its result will arrive on its own.
+          // "sessionExpired" is shown by the banner via the auth-changed event.
+          if (error.kind !== "busy" && error.kind !== "sessionExpired") setRefreshError(error);
+          return;
+        }
+      }
     } finally {
       setRefreshing(false);
     }
@@ -138,11 +153,12 @@ function Shell({
       events.onLoginCancelled(() => setLoginPending(false)),
       // Hourly and wake-up refreshes run in the background and arrive here.
       events.onSnapshotUpdated(setSnapshot),
+      events.onGradescopeLoginCompleted(() => void refresh(true)),
     ];
     return () => {
       for (const s of subscriptions) void s.then((unlisten) => unlisten());
     };
-  }, [onAuthChange]);
+  }, [onAuthChange, refresh]);
 
   // Hidden courses (settings) are filtered out of the list here.
   const visibleSnapshot = useMemo(() => {
@@ -158,6 +174,14 @@ function Shell({
   const startLogin = useCallback(async (origin: string) => {
     await api.startCanvasLogin(origin);
     setLoginPending(true);
+  }, []);
+
+  const startGradescopeLogin = useCallback(async () => {
+    try {
+      await api.startGradescopeLogin();
+    } catch (e) {
+      setRefreshError(toAppError(e));
+    }
   }, []);
 
   const signOut = useCallback(async () => {
@@ -230,6 +254,18 @@ function Shell({
                   onClick={() => void startLogin(auth.origin)}
                 >
                   {t("banner.relogin")}
+                </button>
+              </div>
+            )}
+            {auth.state === "signedIn" && snapshot?.gradescope === "needsGradescopeLogin" && (
+              <div className="banner" role="status">
+                <span>{t("banner.gradescopeDirect")}</span>
+                <button
+                  type="button"
+                  className="banner__action"
+                  onClick={() => void startGradescopeLogin()}
+                >
+                  {t("banner.gradescopeDirectAction")}
                 </button>
               </div>
             )}

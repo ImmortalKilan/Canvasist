@@ -2,18 +2,25 @@
 
 pub mod bridge;
 pub mod client;
+pub mod login;
 pub mod parse;
 
 use std::sync::Arc;
 
+use tauri::webview::Cookie;
 use tauri::AppHandle;
 use url::Url;
 
 use crate::canvas::client::CanvasClient;
 use crate::canvas::cookies::SharedCookies;
 use crate::domain::{Assignment, Course, GradescopeState};
-use crate::error::AppError;
+use crate::error::{AppError, AppResult};
+use bridge::Launch;
 use client::GradescopeClient;
+
+/// Most courses whose Gradescope tab is tried in one refresh. Each course that
+/// is not linked to Gradescope costs several seconds in a hidden window.
+const MAX_LAUNCHES: usize = 5;
 
 pub struct GradescopeResult {
     pub courses: Vec<Course>,
@@ -21,6 +28,9 @@ pub struct GradescopeResult {
     pub state: GradescopeState,
     /// The signed-in Gradescope origin, to remember for the next refresh.
     pub origin: Option<Url>,
+    /// Set when Gradescope opened from every course but did not sign the user
+    /// in: the origin to sign in to directly.
+    pub declined: Option<Url>,
 }
 
 impl GradescopeResult {
@@ -30,21 +40,38 @@ impl GradescopeResult {
             assignments: Vec::new(),
             state,
             origin,
+            declined: None,
         }
     }
+}
+
+/// What a Gradescope refresh starts from.
+pub struct RefreshInput<'a> {
+    pub canvas: &'a CanvasClient,
+    pub canvas_origin: &'a Url,
+    /// Current Canvas courses, in the order their Gradescope tabs are tried.
+    pub course_ids: Vec<String>,
+    pub jar: Arc<SharedCookies>,
+    /// The Gradescope origin of the saved session, if any.
+    pub known_origin: Option<Url>,
+    /// False when launching through Canvas is pointless or must wait: it
+    /// recently declined, or the direct sign-in window is open (a launch clears
+    /// the Gradescope cookies that window shares).
+    pub may_launch: bool,
 }
 
 /// Fetches Gradescope data, (re)connecting through Canvas when the saved
 /// Gradescope session is missing or no longer signed in. Never fails: problems
 /// are reported through [`GradescopeResult::state`] so Canvas data still shows.
-pub async fn refresh(
-    app: &AppHandle,
-    canvas: &CanvasClient,
-    canvas_origin: &Url,
-    course_ids: &[String],
-    jar: Arc<SharedCookies>,
-    known_origin: Option<Url>,
-) -> GradescopeResult {
+pub async fn refresh(app: &AppHandle, input: RefreshInput<'_>) -> GradescopeResult {
+    let RefreshInput {
+        canvas,
+        canvas_origin,
+        course_ids,
+        jar,
+        known_origin,
+        may_launch,
+    } = input;
     if let Some(origin) = known_origin {
         match fetch(&origin, jar.clone()).await {
             Ok(result) => return result,
@@ -55,16 +82,19 @@ pub async fn refresh(
             }
         }
     }
+    if !may_launch {
+        return GradescopeResult::empty(GradescopeState::NeedsGradescopeLogin, None);
+    }
 
-    let tab = match canvas.find_gradescope_tab(course_ids).await {
-        Ok(Some(tab)) => tab,
-        Ok(None) => {
+    let tabs = match canvas.find_gradescope_tabs(&course_ids, MAX_LAUNCHES).await {
+        Ok(tabs) if tabs.is_empty() => {
             log::info!(
                 "gradescope: no Gradescope tab in {} current course(s)",
                 course_ids.len()
             );
             return GradescopeResult::empty(GradescopeState::NotLinked, None);
         }
+        Ok(tabs) => tabs,
         Err(AppError::SessionExpired) => {
             return GradescopeResult::empty(GradescopeState::NeedsCanvasLogin, None)
         }
@@ -74,11 +104,15 @@ pub async fn refresh(
         }
     };
 
-    match bridge::connect(app, canvas_origin, &tab, &jar).await {
-        Ok(origin) => fetch(&origin, jar).await.unwrap_or_else(|e| {
+    match bridge::connect(app, canvas_origin, &tabs, &jar).await {
+        Ok(Launch::Connected(origin)) => fetch(&origin, jar).await.unwrap_or_else(|e| {
             log::warn!("gradescope: fetch after connecting failed: {e}");
             GradescopeResult::empty(GradescopeState::Unavailable, Some(origin))
         }),
+        Ok(Launch::Declined(origin)) => GradescopeResult {
+            declined: Some(origin),
+            ..GradescopeResult::empty(GradescopeState::NeedsGradescopeLogin, None)
+        },
         Err(AppError::SessionExpired) => {
             GradescopeResult::empty(GradescopeState::NeedsCanvasLogin, None)
         }
@@ -89,6 +123,35 @@ pub async fn refresh(
     }
 }
 
+/// Orders course IDs so that courses with a Canvas assignment that opens
+/// Gradescope come first: those are the courses linked to Gradescope.
+pub fn launch_order(course_ids: &[String], assignments: &[Assignment]) -> Vec<String> {
+    let (mut linked, rest): (Vec<String>, Vec<String>) =
+        course_ids.iter().cloned().partition(|id| {
+            assignments
+                .iter()
+                .any(|a| a.links_to_gradescope && &a.course_id == id)
+        });
+    linked.extend(rest);
+    linked
+}
+
+/// Asks Gradescope whether these cookies belong to a signed-in user.
+async fn signed_in(origin: &Url, cookies: &[Cookie<'static>]) -> AppResult<bool> {
+    let candidate = Arc::new(SharedCookies::default());
+    for cookie in cookies {
+        candidate.insert_set_cookie(&cookie.to_string(), origin);
+    }
+    match GradescopeClient::new(origin.clone(), candidate)?
+        .verify_session()
+        .await
+    {
+        Ok(()) => Ok(true),
+        Err(AppError::GradescopeAuth) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 async fn fetch(origin: &Url, jar: Arc<SharedCookies>) -> Result<GradescopeResult, AppError> {
     let (courses, assignments) = GradescopeClient::new(origin.clone(), jar)?.fetch().await?;
     Ok(GradescopeResult {
@@ -96,7 +159,44 @@ async fn fetch(origin: &Url, jar: Arc<SharedCookies>) -> Result<GradescopeResult
         assignments,
         state: GradescopeState::Ok,
         origin: Some(origin.clone()),
+        declined: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Source, Status, SubmissionKind};
+    use time::macros::datetime;
+
+    fn assignment(course_id: &str, links_to_gradescope: bool) -> Assignment {
+        Assignment {
+            id: format!("{course_id}-1"),
+            course_id: course_id.into(),
+            title: "Homework".into(),
+            due_at: datetime!(2026-10-10 0:00 UTC),
+            late_due_at: None,
+            url: None,
+            kind: SubmissionKind::Online,
+            status: Status::NotSubmitted,
+            source: Source::Canvas,
+            links_to_gradescope,
+            also_in_canvas: false,
+            canvas_due_at: None,
+        }
+    }
+
+    #[test]
+    fn courses_linked_to_gradescope_are_tried_first() {
+        let ids: Vec<String> = ["1", "2", "3", "4"].map(String::from).into();
+        let assignments = [
+            assignment("1", false),
+            assignment("3", true),
+            assignment("4", true),
+        ];
+        assert_eq!(launch_order(&ids, &assignments), ["3", "4", "1", "2"]);
+        assert_eq!(launch_order(&ids, &[]), ids);
+    }
 }
 
 /// Manual parser check against the developer's own Gradescope account, across

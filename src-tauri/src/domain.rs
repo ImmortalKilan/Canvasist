@@ -84,6 +84,9 @@ pub enum GradescopeState {
     NotLinked,
     /// Connecting to Gradescope needs a fresh Canvas sign-in.
     NeedsCanvasLogin,
+    /// Gradescope does not sign the user in through Canvas (their courses are
+    /// not linked to it there); the user can sign in to Gradescope directly.
+    NeedsGradescopeLogin,
     /// Gradescope could not be reached or understood this time.
     Unavailable,
 }

@@ -14,9 +14,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::webview::PageLoadEvent;
+use tauri::webview::{Cookie, PageLoadEvent};
 use tauri::{
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
@@ -25,9 +26,9 @@ use url::Url;
 use crate::canvas::client::CanvasClient;
 use crate::canvas::cookies::SharedCookies;
 use crate::canvas::discovery::origin_string;
-use crate::domain::Snapshot;
+use crate::domain::{GradescopeState, Snapshot};
 use crate::error::{AppError, AppResult};
-use crate::gradescope;
+use crate::gradescope::{self, RefreshInput};
 use crate::marks::MarkStore;
 use crate::merge;
 use crate::notify;
@@ -43,6 +44,12 @@ const SNAPSHOT_RECORD: &str = "snapshot";
 const LEGACY_SNAPSHOT_RECORD: &str = "canvas-snapshot";
 const LOGIN_DATA_DIR: &str = "login-webview";
 const WIPE_MARKER: &str = "login-webview.wipe";
+/// After Gradescope declines to sign in through Canvas, the launch (several
+/// seconds per course in a hidden window) is not retried for this long.
+const LAUNCH_RETRY_AFTER: Duration = Duration::from_secs(6 * 60 * 60);
+/// Where a direct Gradescope sign-in starts when no launch has shown which
+/// Gradescope site the school uses.
+const DEFAULT_GRADESCOPE_ORIGIN: &str = "https://www.gradescope.com";
 
 /// Cookie names that mark a host as a Canvas site worth probing.
 const CANVAS_SESSION_COOKIES: &[&str] = &[
@@ -85,11 +92,23 @@ struct StoredSession {
     gradescope_origin: Option<String>,
 }
 
+/// The last time Gradescope opened from Canvas without signing the user in.
+struct Declined {
+    /// The Gradescope site that was reached.
+    origin: Url,
+    at: Instant,
+}
+
 #[derive(Default)]
 struct Inner {
     session: Option<Session>,
     expired: bool,
     snapshot: Option<Snapshot>,
+    /// Kept in memory only, so each start of the app tries Canvas again.
+    gradescope_declined: Option<Declined>,
+    /// Counts direct Gradescope sign-ins, so a refresh that was running during
+    /// one does not overwrite it with its own, older result.
+    gradescope_sign_ins: u64,
 }
 
 pub struct Account {
@@ -127,8 +146,8 @@ impl Account {
             store,
             inner: Mutex::new(Inner {
                 session,
-                expired: false,
                 snapshot,
+                ..Inner::default()
             }),
             refreshing: AtomicBool::new(false),
             login_completed: AtomicBool::new(false),
@@ -165,6 +184,14 @@ impl Account {
                 gradescope_origin: session.gradescope_origin.as_ref().map(origin_string),
             },
         )
+    }
+
+    /// The Gradescope site a direct sign-in should open.
+    pub fn gradescope_login_origin(&self) -> AppResult<Url> {
+        match &self.lock().gradescope_declined {
+            Some(declined) => Ok(declined.origin.clone()),
+            None => Url::parse(DEFAULT_GRADESCOPE_ORIGIN).map_err(|_| AppError::InvalidUrl),
+        }
     }
 }
 
@@ -318,6 +345,33 @@ fn finish_login(login_window: WebviewWindow, session: Session) {
     emit_status(&app);
 }
 
+// ---------- direct Gradescope sign-in ----------
+
+/// Adds the cookies of a direct Gradescope sign-in (see `gradescope::login`)
+/// to the saved session.
+pub fn attach_gradescope_session(
+    app: &AppHandle,
+    origin: Url,
+    cookies: &[Cookie<'static>],
+) -> AppResult<()> {
+    let account = app.state::<Account>();
+    let session = {
+        let mut inner = account.lock();
+        let session = inner.session.as_mut().ok_or(AppError::NotSignedIn)?;
+        for cookie in cookies {
+            session
+                .cookies
+                .insert_set_cookie(&cookie.to_string(), &origin);
+        }
+        session.gradescope_origin = Some(origin);
+        let session = session.clone();
+        inner.gradescope_declined = None;
+        inner.gradescope_sign_ins += 1;
+        session
+    };
+    account.save_session(&session)
+}
+
 // ---------- refresh ----------
 
 /// Clears the busy flag when a refresh ends, even on early return.
@@ -336,11 +390,15 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
     }
     let _guard = RefreshGuard(&account.refreshing);
 
-    let session = account
-        .lock()
-        .session
-        .clone()
-        .ok_or(AppError::NotSignedIn)?;
+    let (session, sign_ins, recently_declined) = {
+        let inner = account.lock();
+        let session = inner.session.clone().ok_or(AppError::NotSignedIn)?;
+        let recently_declined = inner
+            .gradescope_declined
+            .as_ref()
+            .is_some_and(|d| d.at.elapsed() < LAUNCH_RETRY_AFTER);
+        (session, inner.gradescope_sign_ins, recently_declined)
+    };
     let show_unsubmittable = app.state::<SettingsStore>().get().show_unsubmittable;
     let canvas = CanvasClient::new(session.origin.clone(), session.cookies.clone())?;
 
@@ -361,13 +419,19 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
 
     let gs = gradescope::refresh(
         app,
-        &canvas,
-        &session.origin,
-        &canvas_data.course_ids,
-        session.cookies.clone(),
-        session.gradescope_origin.clone(),
+        RefreshInput {
+            canvas: &canvas,
+            canvas_origin: &session.origin,
+            course_ids: gradescope::launch_order(&canvas_data.course_ids, &canvas_data.assignments),
+            jar: session.cookies.clone(),
+            known_origin: session.gradescope_origin.clone(),
+            may_launch: !recently_declined && !gradescope::login::is_open(app),
+        },
     )
     .await;
+    // A saved Gradescope session ended and Canvas could not replace it.
+    let gradescope_ended =
+        session.gradescope_origin.is_some() && gs.state == GradescopeState::NeedsGradescopeLogin;
 
     let mut courses = canvas_data.courses;
     courses.extend(gs.courses);
@@ -381,24 +445,41 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
         gradescope: gs.state,
     };
 
-    let session = Session {
-        gradescope_origin: gs.origin,
-        ..session
-    };
-    let was_expired = {
+    let notify_gradescope_ended;
+    let (session, was_expired) = {
         let mut inner = account.lock();
         // Skip the update if the user signed out or switched sites meanwhile.
-        let still_current = inner
-            .session
-            .as_ref()
-            .is_some_and(|s| s.origin == session.origin);
-        if !still_current {
-            return Ok(snapshot);
+        let current = match &inner.session {
+            Some(s) if s.origin == session.origin => s.gradescope_origin.clone(),
+            _ => return Ok(snapshot),
+        };
+        // A direct Gradescope sign-in that finished while this refresh ran
+        // is newer than this refresh's Gradescope result, so it is kept.
+        let signed_in_meanwhile = inner.gradescope_sign_ins != sign_ins;
+        let session = Session {
+            gradescope_origin: if signed_in_meanwhile {
+                current
+            } else {
+                gs.origin
+            },
+            ..session
+        };
+        if let (Some(origin), false) = (gs.declined, signed_in_meanwhile) {
+            inner.gradescope_declined = Some(Declined {
+                origin,
+                at: Instant::now(),
+            });
         }
+        notify_gradescope_ended = gradescope_ended && !signed_in_meanwhile;
         inner.session = Some(session.clone());
         inner.snapshot = Some(snapshot.clone());
-        std::mem::replace(&mut inner.expired, false)
+        (session, std::mem::replace(&mut inner.expired, false))
     };
+    // One notification per ended session: the next refresh has no saved
+    // Gradescope session left to end.
+    if notify_gradescope_ended {
+        notify::send_gradescope_expired(app);
+    }
     if let Err(e) = account.store.save(SNAPSHOT_RECORD, &snapshot) {
         log::warn!("could not cache snapshot: {e}");
     }
@@ -420,6 +501,7 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
 
 pub fn sign_out(app: &AppHandle) -> AppResult<()> {
     cancel_login(app);
+    gradescope::login::cancel(app);
     let account = app.state::<Account>();
     *account.lock() = Inner::default();
     account.store.delete(SESSION_RECORD)?;

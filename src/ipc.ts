@@ -33,7 +33,8 @@ export type SubmissionKind = "online" | "onPaper" | "noSubmission" | "notGraded"
 export type Source = "canvas" | "gradescope";
 
 /** Outcome of the Gradescope part of the last refresh. */
-export type GradescopeState = "ok" | "notLinked" | "needsCanvasLogin" | "unavailable";
+export type GradescopeState =
+  "ok" | "notLinked" | "needsCanvasLogin" | "needsGradescopeLogin" | "unavailable";
 
 export interface Course {
   id: string;
@@ -112,6 +113,7 @@ export const api = {
   checkCanvasUrl: (input: string) => invoke<string>("check_canvas_url", { input }),
   startCanvasLogin: (origin: string) => invoke<null>("start_canvas_login", { origin }),
   cancelCanvasLogin: () => invoke<null>("cancel_canvas_login"),
+  startGradescopeLogin: () => invoke<null>("start_gradescope_login"),
   getAuthStatus: () => invoke<AuthStatus>("get_auth_status"),
   signOut: () => invoke<null>("sign_out"),
 
@@ -139,6 +141,8 @@ export const events = {
     listen("canvas-login-cancelled", () => handler()),
   onSnapshotUpdated: (handler: (snapshot: Snapshot) => void): Promise<UnlistenFn> =>
     listen<Snapshot>("snapshot-updated", (e) => handler(e.payload)),
+  onGradescopeLoginCompleted: (handler: () => void): Promise<UnlistenFn> =>
+    listen("gradescope-login-completed", () => handler()),
 };
 
 function isAppError(e: unknown): e is AppError {

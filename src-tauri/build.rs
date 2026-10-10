@@ -12,6 +12,7 @@ fn main() {
             "check_canvas_url",
             "start_canvas_login",
             "cancel_canvas_login",
+            "start_gradescope_login",
             "get_auth_status",
             "sign_out",
             "get_snapshot",

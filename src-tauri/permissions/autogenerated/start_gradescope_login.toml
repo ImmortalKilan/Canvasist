@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-gradescope-login"
+description = "Enables the start_gradescope_login command without any pre-configured scope."
+commands.allow = ["start_gradescope_login"]
+
+[[permission]]
+identifier = "deny-start-gradescope-login"
+description = "Denies the start_gradescope_login command without any pre-configured scope."
+commands.deny = ["start_gradescope_login"]

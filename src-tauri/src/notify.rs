@@ -58,6 +58,14 @@ pub fn send_session_expired(app: &AppHandle) {
     show(app, "Canvasist", body);
 }
 
+pub fn send_gradescope_expired(app: &AppHandle) {
+    let body = match locale(app) {
+        Locale::En => "Your Gradescope sign-in has expired. Open Canvasist to sign in again.",
+        Locale::ZhCn => "Gradescope 登录已过期，请打开 Canvasist 重新登录。",
+    };
+    show(app, "Canvasist", body);
+}
+
 #[cfg(windows)]
 fn show(app: &AppHandle, title: &str, body: &str) {
     use tauri_winrt_notification::Toast;

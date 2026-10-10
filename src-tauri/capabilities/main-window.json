@@ -13,6 +13,7 @@
     "allow-check-canvas-url",
     "allow-start-canvas-login",
     "allow-cancel-canvas-login",
+    "allow-start-gradescope-login",
     "allow-get-auth-status",
     "allow-sign-out",
     "allow-get-snapshot",

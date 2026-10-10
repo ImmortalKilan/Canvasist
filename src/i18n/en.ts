@@ -67,6 +67,9 @@ export const en = {
   "banner.expired": "Your Canvas session has expired.",
   "banner.relogin": "Sign in again",
   "banner.gradescopeLogin": "Sign in to Canvas again to load Gradescope assignments.",
+  "banner.gradescopeDirect":
+    "Your Gradescope courses can't be opened through Canvas. Sign in to Gradescope once to load their assignments.",
+  "banner.gradescopeDirectAction": "Sign in to Gradescope",
   "banner.gradescopeUnavailable":
     "Gradescope couldn't be reached. It will be retried on the next refresh.",
 

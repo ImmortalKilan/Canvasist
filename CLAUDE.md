@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Canvasist is a Windows tray app (Tauri 2: Rust backend in `src-tauri/`, React 19 + TypeScript frontend in `src/`). It merges a student's Canvas and Gradescope assignments into one list and sends deadline reminders. It has no server, no telemetry and no access-token option: the only way in is the user's own Canvas login session, captured in an in-app login window.
+Canvasist is a Windows tray app (Tauri 2: Rust backend in `src-tauri/`, React 19 + TypeScript frontend in `src/`). It merges a student's Canvas and Gradescope assignments into one list and sends deadline reminders. It has no server, no telemetry and no access-token option: the only way in is the user's own Canvas login session, captured in an in-app login window (plus a Gradescope one when Gradescope can't be opened through Canvas).
 
 ## Commands
 
@@ -42,6 +42,8 @@ CI (`.github/workflows/ci.yml`) runs exactly these checks on `windows-latest`. T
   - `bridge.rs` opens a hidden window (`gradescope-bridge`, sharing `login-webview`) and clears its old Gradescope cookies. It injects the Canvas cookies with `set_cookie` (an explicit domain is required) and opens the course's Gradescope LTI tab.
   - `launch.js`, an initialization script, retargets Canvas's `tool_form` so the launch runs as the whole page rather than inside Canvas's frame. Cookies set inside the frame are third-party and can be blocked or kept separate on some machines.
   - Each new set of Gradescope cookies is checked against `/account` (no cookie names are assumed). Cookies that pass are copied into the jar.
+  - Gradescope only signs a student in from a course the instructor linked through Canvas; other courses' tabs open a "Course hasn't been created" page. The bridge tries up to 5 courses (those with Canvas assignments that open Gradescope first) and moves on once a Gradescope page sits still for 8 s without a sign-in.
+  - When no course signs in, the state is `needsGradescopeLogin`. Launching is then skipped for 6 h (in memory only) and the list offers a direct sign-in: `login.rs` opens Gradescope's own login page in `gradescope-login` (sharing `login-webview`) and adds the verified cookies to the session.
   - `client.rs` and `parse.rs` then fetch and scrape the pages over plain HTTP with `scraper`.
   - Gradescope IDs carry a `gs:` prefix.
 - **`merge.rs`** merges Canvas/Gradescope duplicates by normalized title plus a deadline within 24 h, or by Canvas's link to Gradescope. Gradescope's deadline and status win, and a differing Canvas deadline is kept in `canvas_due_at`. Ambiguous matches stay as two entries on purpose.
@@ -67,7 +69,8 @@ CI (`.github/workflows/ci.yml`) runs exactly these checks on `windows-latest`. T
   3. Add it to the app manifest list in `build.rs`.
   4. Add `allow-<name>` to `capabilities/main-window.json`.
   5. Add a wrapper in `src/ipc.ts`.
-- Only the bundled `main` window has a capability. Remote-content windows (login, Gradescope bridge) must never be given one. The CSP in `tauri.conf.json` is strict; keep it that way.
+- A command that creates a window must be `async`: building a window inside a synchronous command deadlocks on Windows, and the new window stays blank.
+- Only the bundled `main` window has a capability. Remote-content windows (Canvas login, Gradescope bridge, Gradescope sign-in) must never be given one. The CSP in `tauri.conf.json` is strict; keep it that way.
 - Logs, test output and the live probe must never contain cookies, credentials, course names, assignment titles or grades. Log counts and status labels only. Test fixtures and placeholders use generic hosts such as `canvas.example.edu`, never a real school.
 - `spikes/` holds throwaway experiments (Playwright scripts) and is not part of the app. Vitest excludes it.
 - Code comments are in English.

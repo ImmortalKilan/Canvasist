@@ -10,10 +10,16 @@
 //! The launch is opened as the whole page rather than inside Canvas's frame
 //! (see `launch.js`): cookies set inside a frame are third-party cookies, which
 //! some WebView2 setups block or keep apart from the rest of the browser data.
+//!
+//! Gradescope only signs a student in from a course that the instructor has
+//! linked to Gradescope through Canvas. Other courses still show a Gradescope
+//! tab, which opens a "Course hasn't been created" page. Each course is tried
+//! in turn; when none signs the user in, the user can sign in to Gradescope
+//! directly instead (see `login.rs`).
 
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,7 +27,6 @@ use tauri::webview::Cookie;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use url::Url;
 
-use super::client::GradescopeClient;
 use crate::account;
 use crate::canvas::cookies::SharedCookies;
 use crate::domain::is_gradescope_host;
@@ -34,13 +39,36 @@ const GRADESCOPE_ORIGINS: &[&str] = &[
     "https://www.gradescope.eu",
 ];
 const LAUNCH_SCRIPT: &str = include_str!("launch.js");
+/// Longest wait for one course's launch.
 const TIMEOUT: Duration = Duration::from_secs(45);
 const POLL_INTERVAL: Duration = Duration::from_millis(750);
-/// Minimum time between two sign-in checks against Gradescope.
+/// Minimum time between two rounds of sign-in checks against Gradescope.
 const CHECK_INTERVAL: Duration = Duration::from_secs(2);
 /// An unchanged set of cookies is checked again after this long, in case
 /// Gradescope finished signing in on its side after the previous check.
 const RECHECK_INTERVAL: Duration = Duration::from_secs(10);
+/// A Gradescope page that has not navigated for this long, without the user
+/// being signed in, means Gradescope declined to sign in from that course.
+const SETTLE: Duration = Duration::from_secs(8);
+
+/// How a launch through Canvas ended.
+#[derive(Debug)]
+pub enum Launch {
+    /// Signed in to this Gradescope origin.
+    Connected(Url),
+    /// Gradescope opened from every course tried but did not sign the user in.
+    /// Carries the Gradescope origin that was reached, for a direct sign-in.
+    Declined(Url),
+}
+
+/// How one course's launch ended.
+enum Attempt {
+    SignedIn(Url, Vec<Cookie<'static>>),
+    /// Reached Gradescope (this origin and page kind) without being signed in.
+    Declined(Url, String),
+    /// Never reached Gradescope.
+    Stuck,
+}
 
 /// Closes the bridge window however the launch ends.
 struct WindowGuard(WebviewWindow);
@@ -51,14 +79,14 @@ impl Drop for WindowGuard {
     }
 }
 
-/// Launches Gradescope from `tab_url` and copies its session cookies into
-/// `jar`. Returns the Gradescope origin that was signed in.
+/// Launches Gradescope from each course tab in `tabs`, in order, until one
+/// signs the user in, and copies that session's cookies into `jar`.
 pub async fn connect(
     app: &AppHandle,
     canvas_origin: &Url,
-    tab_url: &Url,
+    tabs: &[Url],
     jar: &SharedCookies,
-) -> AppResult<Url> {
+) -> AppResult<Launch> {
     if let Some(stale) = app.get_webview_window(BRIDGE_LABEL) {
         let _ = stale.destroy();
     }
@@ -71,7 +99,8 @@ pub async fn connect(
     // page. Other hosts (Gradescope's, or a launch service's such as
     // Turnitin's) appear during a normal launch, so only this counts.
     let sent_to_login = Arc::new(AtomicBool::new(false));
-    let login_flag = sent_to_login.clone();
+    let navigations = Arc::new(AtomicUsize::new(0));
+    let (login_flag, nav_count) = (sent_to_login.clone(), navigations.clone());
     let canvas = canvas_origin.origin();
 
     let window = WebviewWindowBuilder::new(
@@ -85,6 +114,7 @@ pub async fn connect(
     .data_directory(account::login_data_dir(app)?)
     .initialization_script(launch_script(canvas_origin))
     .on_navigation(move |url| {
+        nav_count.fetch_add(1, Ordering::SeqCst);
         if url.origin() == canvas && is_login_path(url.path()) {
             login_flag.store(true, Ordering::SeqCst);
         }
@@ -92,14 +122,6 @@ pub async fn connect(
     })
     .build()?;
     let window = WindowGuard(window);
-
-    // Start without Gradescope cookies left over from an earlier session, so
-    // only cookies set by this launch are considered.
-    for origin in &origins {
-        for cookie in window.0.cookies_for_url(origin.clone())? {
-            window.0.delete_cookie(cookie)?;
-        }
-    }
 
     // Canvas session cookies have no expiry, so the webview forgets them on
     // restart; hand it the stored ones before navigating.
@@ -116,71 +138,153 @@ pub async fn connect(
             .build();
         window.0.set_cookie(cookie)?;
     }
-    window.0.navigate(tab_url.clone())?;
-    log::info!("gradescope: launching through Canvas");
+    log::info!(
+        "gradescope: launching through Canvas ({} course(s) to try)",
+        tabs.len()
+    );
 
-    // Gradescope sets cookies several times during a launch; each new set is
-    // checked against Gradescope itself, so no cookie names are assumed.
+    let mut declined = None;
+    for (i, tab) in tabs.iter().enumerate() {
+        // The direct sign-in window shares these cookies; clearing them would
+        // undo a sign-in in progress there.
+        if super::login::is_open(app) {
+            log::info!("gradescope: direct sign-in started, launch stopped");
+            break;
+        }
+        // Start without Gradescope cookies left over from an earlier session
+        // or course, so only cookies set by this launch are considered.
+        for origin in &origins {
+            for cookie in window.0.cookies_for_url(origin.clone())? {
+                window.0.delete_cookie(cookie)?;
+            }
+        }
+        window.0.navigate(tab.clone())?;
+
+        match attempt(&window.0, &origins, &navigations, &sent_to_login).await? {
+            Attempt::SignedIn(origin, cookies) => {
+                for cookie in &cookies {
+                    jar.insert_set_cookie(&cookie.to_string(), &origin);
+                }
+                log::info!(
+                    "gradescope: session obtained from course {} of {} (full-page launch: {})",
+                    i + 1,
+                    tabs.len(),
+                    window_url(&window.0)
+                        .and_then(|u| u.host_str().map(is_gradescope_host))
+                        .unwrap_or(false)
+                );
+                return Ok(Launch::Connected(origin));
+            }
+            Attempt::Declined(origin, page) => {
+                log::info!(
+                    "gradescope: course {} of {} opened Gradescope ({page} page) without signing in",
+                    i + 1,
+                    tabs.len()
+                );
+                declined = Some(origin);
+            }
+            Attempt::Stuck => {
+                // Not specific to one course: the launch itself did not work.
+                let on_canvas =
+                    window_url(&window.0).is_some_and(|u| u.host_str() == canvas_origin.host_str());
+                log::info!(
+                    "gradescope: launch timed out (on canvas: {on_canvas}, gradescope cookie names: {:?})",
+                    cookie_names(&window.0, &origins)
+                );
+                return Err(AppError::GradescopeAuth);
+            }
+        }
+    }
+
+    if declined.is_some() {
+        log::info!(
+            "gradescope: no course signed in through Canvas (gradescope cookie names: {:?})",
+            cookie_names(&window.0, &origins)
+        );
+    }
+    declined
+        .map(Launch::Declined)
+        .ok_or(AppError::GradescopeAuth)
+}
+
+/// Follows one course's launch until Gradescope signs in, settles without
+/// signing in, or the launch times out.
+async fn attempt(
+    window: &WebviewWindow,
+    origins: &[Url],
+    navigations: &AtomicUsize,
+    sent_to_login: &AtomicBool,
+) -> AppResult<Attempt> {
     let mut checked: HashMap<Url, (u64, Instant)> = HashMap::new();
-    let mut last_check: Option<Instant> = None;
+    let mut last_round: Option<Instant> = None;
+    let mut seen = navigations.load(Ordering::SeqCst);
+    let mut quiet_since = Instant::now();
     let deadline = Instant::now() + TIMEOUT;
     while Instant::now() < deadline {
         tokio::time::sleep(POLL_INTERVAL).await;
-        if last_check.is_some_and(|t| t.elapsed() < CHECK_INTERVAL) {
+        if sent_to_login.load(Ordering::SeqCst) {
+            log::info!("gradescope: Canvas asked to sign in again");
+            return Err(AppError::SessionExpired);
+        }
+        let count = navigations.load(Ordering::SeqCst);
+        if count != seen {
+            seen = count;
+            quiet_since = Instant::now();
+        }
+
+        let landed = window_url(window).filter(|u| u.host_str().is_some_and(is_gradescope_host));
+        if let Some(page) = landed.as_ref().filter(|_| quiet_since.elapsed() >= SETTLE) {
+            // Settled on Gradescope: one last check of whatever it has set.
+            return Ok(match check(window, origins, &mut checked, true).await? {
+                Some((origin, cookies)) => Attempt::SignedIn(origin, cookies),
+                None => Attempt::Declined(origin_of(page)?, page_kind(page.path())),
+            });
+        }
+
+        if last_round.is_some_and(|t| t.elapsed() < CHECK_INTERVAL) {
             continue;
         }
-        for origin in &origins {
-            let cookies = window.0.cookies_for_url(origin.clone())?;
-            if cookies.is_empty() {
-                continue;
-            }
-            let fingerprint = fingerprint(&cookies);
-            if checked
-                .get(origin)
-                .is_some_and(|(f, at)| *f == fingerprint && at.elapsed() < RECHECK_INTERVAL)
-            {
-                continue;
-            }
-            last_check = Some(Instant::now());
-            checked.insert(origin.clone(), (fingerprint, Instant::now()));
-            if signed_in(origin, &cookies).await? {
-                for cookie in &cookies {
-                    jar.insert_set_cookie(&cookie.to_string(), origin);
-                }
-                log::info!(
-                    "gradescope: session obtained (full-page launch: {})",
-                    window_host(&window.0)
-                        .as_deref()
-                        .is_some_and(is_gradescope_host)
-                );
-                return Ok(origin.clone());
-            }
-            break;
+        last_round = Some(Instant::now());
+        if let Some((origin, cookies)) = check(window, origins, &mut checked, false).await? {
+            return Ok(Attempt::SignedIn(origin, cookies));
         }
     }
+    Ok(
+        match window_url(window).filter(|u| u.host_str().is_some_and(is_gradescope_host)) {
+            Some(page) => Attempt::Declined(origin_of(&page)?, page_kind(page.path())),
+            None => Attempt::Stuck,
+        },
+    )
+}
 
-    let host_now = window_host(&window.0);
-    let on_canvas = host_now.as_deref() == canvas_origin.host_str();
-    let on_gradescope = host_now.as_deref().is_some_and(is_gradescope_host);
-    let sent_to_login = sent_to_login.load(Ordering::SeqCst);
-    // Cookie names only (never values): shows how far Gradescope got.
-    let mut names: Vec<String> = Vec::new();
-    for origin in &origins {
-        for cookie in window.0.cookies_for_url(origin.clone()).unwrap_or_default() {
-            if !names.iter().any(|n| n == cookie.name()) {
-                names.push(cookie.name().to_owned());
-            }
+/// Asks Gradescope about each origin's cookies, skipping sets that were
+/// checked recently unless `force`. Gradescope sets cookies several times
+/// during a launch; checking against Gradescope itself means no cookie names
+/// are assumed. Returns the signed-in origin and its cookies.
+async fn check(
+    window: &WebviewWindow,
+    origins: &[Url],
+    checked: &mut HashMap<Url, (u64, Instant)>,
+    force: bool,
+) -> AppResult<Option<(Url, Vec<Cookie<'static>>)>> {
+    for origin in origins {
+        let cookies = window.cookies_for_url(origin.clone())?;
+        if cookies.is_empty() {
+            continue;
+        }
+        let fingerprint = fingerprint(&cookies);
+        let recent = checked
+            .get(origin)
+            .is_some_and(|(f, at)| *f == fingerprint && at.elapsed() < RECHECK_INTERVAL);
+        if recent && !force {
+            continue;
+        }
+        checked.insert(origin.clone(), (fingerprint, Instant::now()));
+        if super::signed_in(origin, &cookies).await? {
+            return Ok(Some((origin.clone(), cookies)));
         }
     }
-    names.sort();
-    log::info!(
-        "gradescope: launch timed out (on canvas: {on_canvas}, on gradescope: {on_gradescope}, sent to canvas login: {sent_to_login}, gradescope cookie names: {names:?})"
-    );
-    if sent_to_login {
-        Err(AppError::SessionExpired)
-    } else {
-        Err(AppError::GradescopeAuth)
-    }
+    Ok(None)
 }
 
 /// The launch script with the Canvas origin filled in. `Url` serializes an
@@ -200,32 +304,42 @@ fn fingerprint(cookies: &[Cookie<'static>]) -> u64 {
     hasher.finish()
 }
 
-/// Asks Gradescope whether these cookies belong to a signed-in user.
-async fn signed_in(origin: &Url, cookies: &[Cookie<'static>]) -> AppResult<bool> {
-    let candidate = Arc::new(SharedCookies::default());
-    for cookie in cookies {
-        candidate.insert_set_cookie(&cookie.to_string(), origin);
-    }
-    match GradescopeClient::new(origin.clone(), candidate)?
-        .verify_session()
-        .await
-    {
-        Ok(()) => Ok(true),
-        Err(AppError::GradescopeAuth) => Ok(false),
-        Err(e) => Err(e),
-    }
-}
-
 /// Canvas's sign-in pages: `/login`, `/login/saml`, `/login/canvas`, ...
 fn is_login_path(path: &str) -> bool {
     path == "/login" || path.starts_with("/login/")
 }
 
-fn window_host(window: &WebviewWindow) -> Option<String> {
-    window
-        .url()
-        .ok()
-        .and_then(|u| u.host_str().map(str::to_owned))
+/// A label for the kind of Gradescope page reached, safe to log: the first
+/// path segment when it is a plain route name, never IDs or other values.
+fn page_kind(path: &str) -> String {
+    let segment = path.trim_start_matches('/').split('/').next().unwrap_or("");
+    let is_route =
+        segment.len() <= 24 && segment.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
+    match segment {
+        "" => "home".into(),
+        s if is_route => s.into(),
+        _ => "other".into(),
+    }
+}
+
+fn origin_of(url: &Url) -> AppResult<Url> {
+    Url::parse(&url.origin().ascii_serialization()).map_err(|_| AppError::InvalidUrl)
+}
+
+fn window_url(window: &WebviewWindow) -> Option<Url> {
+    window.url().ok()
+}
+
+/// Names (never values) of the Gradescope cookies in the window, for logs.
+fn cookie_names(window: &WebviewWindow, origins: &[Url]) -> Vec<String> {
+    let mut names: Vec<String> = origins
+        .iter()
+        .flat_map(|o| window.cookies_for_url(o.clone()).unwrap_or_default())
+        .map(|c| c.name().to_owned())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
 }
 
 #[cfg(test)]
@@ -255,5 +369,17 @@ mod tests {
         let ab = fingerprint(&[a.clone(), b.clone()]);
         assert_eq!(ab, fingerprint(&[b, a.clone()]));
         assert_ne!(ab, fingerprint(&[a, b2]));
+    }
+
+    #[test]
+    fn page_kinds_never_contain_ids() {
+        assert_eq!(page_kind("/"), "home");
+        assert_eq!(page_kind("/login"), "login");
+        assert_eq!(page_kind("/courses/123456/assignments/7"), "courses");
+        assert_eq!(page_kind("/auth/lti1p3/launch"), "auth");
+        assert_eq!(page_kind("/123456"), "other");
+        assert_eq!(page_kind("/a1b2c3d4"), "other");
+        assert_eq!(page_kind("/Mixed"), "other");
+        assert_eq!(page_kind(&format!("/{}", "x".repeat(25))), "other");
     }
 }

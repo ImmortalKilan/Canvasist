@@ -68,6 +68,9 @@ export const zhCN: Record<MessageKey, string> = {
   "banner.expired": "Canvas 登录已过期。",
   "banner.relogin": "重新登录",
   "banner.gradescopeLogin": "需要重新登录 Canvas 才能读取 Gradescope 作业。",
+  "banner.gradescopeDirect":
+    "无法经由 Canvas 打开你的 Gradescope 课程。单独登录 Gradescope 一次，即可读取其中的作业。",
+  "banner.gradescopeDirectAction": "登录 Gradescope",
   "banner.gradescopeUnavailable": "暂时无法连接 Gradescope，下次刷新时会自动重试。",
 
   "settings.title": "设置",

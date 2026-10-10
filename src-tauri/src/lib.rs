@@ -80,6 +80,7 @@ pub fn run() {
             commands::check_canvas_url,
             commands::start_canvas_login,
             commands::cancel_canvas_login,
+            commands::start_gradescope_login,
             commands::get_auth_status,
             commands::sign_out,
             commands::get_snapshot,
