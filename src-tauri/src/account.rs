@@ -437,7 +437,7 @@ pub async fn refresh(app: &AppHandle) -> AppResult<Snapshot> {
     courses.extend(gs.courses);
     let mut assignments = canvas_data.assignments;
     assignments.extend(gs.assignments);
-    let assignments = merge::merge(assignments);
+    let assignments = merge::merge(&courses, assignments);
     let snapshot = Snapshot {
         fetched_at: time::OffsetDateTime::now_utc(),
         courses,
