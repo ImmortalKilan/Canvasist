@@ -37,7 +37,6 @@ pub fn start(app: AppHandle) {
             let woke = now
                 .duration_since(last_tick)
                 .is_ok_and(|gap| gap > TICK + WAKE_GAP);
-            last_tick = now;
             if woke {
                 log::info!("scheduler: system resumed, refreshing");
             }
@@ -57,6 +56,9 @@ pub fn start(app: AppHandle) {
 
             check_reminders(&app);
             update::tick(&app, now);
+            // Taken after the refresh, so a slow refresh (several Gradescope
+            // launches can take minutes) is never mistaken for a wake.
+            last_tick = SystemTime::now();
             tokio::time::sleep(TICK).await;
         }
     });
